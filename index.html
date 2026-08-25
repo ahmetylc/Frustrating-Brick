@@ -57,7 +57,7 @@
 
 <script>
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d", { alpha: false });
+const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
 const V_WIDTH = 360;
 const V_HEIGHT = 628;
@@ -1037,24 +1037,26 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
 const FIXED_STEP = 1000 / 60;
 let accumulator = 0;
 let lastFrameTime = performance.now();
+const MAX_FRAME_TIME = 34;
+const MAX_PHYSICS_STEPS = 2;
 
 function gameLoop(currentTimestamp) {
   if (!currentTimestamp) currentTimestamp = performance.now();
   let frameDuration = currentTimestamp - lastFrameTime;
   lastFrameTime = currentTimestamp;
 
-  if (frameDuration > 50) frameDuration = 50;
+  if (frameDuration > MAX_FRAME_TIME) frameDuration = MAX_FRAME_TIME;
 
   accumulator += frameDuration;
 
   let steps = 0;
-  while (accumulator >= FIXED_STEP && steps < 2) {
+  while (accumulator >= FIXED_STEP && steps < MAX_PHYSICS_STEPS) {
     fixedPhysicsUpdate();
     accumulator -= FIXED_STEP;
     steps++;
   }
 
-  if (accumulator > FIXED_STEP * 2) {
+  if (accumulator >= FIXED_STEP) {
     accumulator = 0;
   }
 
@@ -1062,15 +1064,21 @@ function gameLoop(currentTimestamp) {
   requestAnimationFrame(gameLoop);
 }
 
+document.addEventListener("visibilitychange", () => {
+  lastFrameTime = performance.now();
+  accumulator = 0;
+});
+
 // Canvas İçi Tıklama / Dokunma Dönüştürücüsü
 canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
+  if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
   const rect = canvas.getBoundingClientRect();
   const scaleX = V_WIDTH / rect.width;
   const scaleY = V_HEIGHT / rect.height;
 
-  const canvasX = (e.clientX - rect.left) * scaleX;
-  const canvasY = (e.clientY - rect.top) * scaleY;
+  const canvasX = Math.max(0, Math.min(V_WIDTH, (e.clientX - rect.left) * scaleX));
+  const canvasY = Math.max(0, Math.min(V_HEIGHT, (e.clientY - rect.top) * scaleY));
 
   const direction = canvasX < V_WIDTH / 2 ? "left" : "right";
   handleInput(direction, canvasX, canvasY);

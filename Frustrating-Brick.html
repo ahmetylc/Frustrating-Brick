@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Frustrating Brick</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body {
+      background: #141414;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #wrapper {
+      position: relative;
+      width: 100vw;
+      max-width: 400px;
+      height: 100vh;
+      max-height: 720px;
+      background: #ffffff;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<div id="wrapper">
+  <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const V_WIDTH = 360;
+const V_HEIGHT = 628;
+canvas.width = V_WIDTH;
+canvas.height = V_HEIGHT;
+
+const PALETTES = [
+  "#86b6fe", // Açık Mavi
+  "#9358a9", // Mor
+  "#dd4e4e", // Kırmızı
+  "#edd246", // Sarı
+  "#90d886", // Yeşil
+  "#5cc9b8", // Turkuaz
+  "#e85d9e"  // Pembe
+];
+
+const REWARD_COLORS = [
+  "#deb887", // 10-19: Bronz / Bej
+  "#70a1ff", // 20-29: Safir Mavi
+  "#8854d0", // 30-39: Ametist Mor
+  "#ff4757", // 40-49: Mercan Kırmızı
+  "#ffa502", // 50-59: Kehribar Turuncu
+  "#2ed573", // 60-69: Zümrüt Yeşil
+  "#00d2d3", // 70-79: Elmas Turkuaz
+  "#e056fd", // 80-89: Neon Pembe
+  "#f1c40f", // 90-99: Parlak Altın
+  "#2f3542"  // 100+: Obsidyen Siyahı
+];
+
+// Dil Sözlüğü (Varsayılan: İngilizce)
+const I18N = {
+  en: {
+    rate: "RATE",
+    settings: "SETTINGS",
+    diffLabel: "Difficulty: ",
+    shieldOn: " • Shield ON",
+    shieldOnShort: " (Shield ON)",
+    back: "BACK",
+    deathPrev: "Death Prevention",
+    score: "Score",
+    best: "Best",
+    reward: "Reward",
+    diffNames: ["EASY", "MEDIUM", "HARD", "VERY HARD", "INSANE"]
+  },
+  tr: {
+    rate: "OYLA",
+    settings: "AYARLAR",
+    diffLabel: "Zorluk: ",
+    shieldOn: " • Koruma Açık",
+    shieldOnShort: " (Koruma Açık)",
+    back: "GERİ",
+    deathPrev: "Ölüm Engelleme",
+    score: "Skor",
+    best: "En İyi",
+    reward: "Ödül",
+    diffNames: ["KOLAY", "ORTA", "ZOR", "ÇOK ZOR", "AŞIRI ZOR"]
+  }
+};
+
+let currentLang = localStorage.getItem("frustrating_brick_lang") || "en";
+
+// 5 Kademeli Zorluk Seviyesi
+const DIFFICULTY_CONFIG = [
+  {
+    id: 0,
+    color: "#2ed573", // Yeşil
+    lowerRange: [22, 42],
+    upperRange: [22, 44],
+    closeChance: 0.85,
+    closeRange: [18, 30],
+    hInset: 3
+  },
+  {
+    id: 1,
+    color: "#3742fa", // Mavi
+    lowerRange: [30, 52],
+    upperRange: [30, 54],
+    closeChance: 0.65,
+    closeRange: [24, 40],
+    hInset: 5
+  },
+  {
+    id: 2,
+    color: "#ffa502", // Turuncu
+    lowerRange: [40, 66],
+    upperRange: [40, 67],
+    closeChance: 0.40,
+    closeRange: [32, 50],
+    hInset: 8
+  },
+  {
+    id: 3,
+    color: "#ff4757", // Kırmızı
+    lowerRange: [48, 74],
+    upperRange: [48, 74],
+    closeChance: 0.10,
+    closeRange: [40, 56],
+    hInset: 16
+  },
+  {
+    id: 4,
+    color: "#2f3542", // Obsidyen Koyu Grafit
+    lowerRange: [58, 86],
+    upperRange: [58, 86],
+    closeChance: 0.04,
+    closeRange: [45, 60],
+    hInset: 22
+  }
+];
+
+let currentDifficulty = parseInt(localStorage.getItem("frustrating_brick_diff") || "1");
+if (currentDifficulty > 4) currentDifficulty = 1;
+
+let deathPreventionEnabled = localStorage.getItem("frustrating_brick_dp") !== "false";
+
+const STATE = {
+  MENU: 0,
+  READY: 1,
+  PLAYING: 2,
+  PAUSED: 3,
+  GAMEOVER: 4,
+  SETTINGS: 5
+};
+
+let currentState = STATE.MENU;
+let settingsReturnState = STATE.MENU;
+let score = 0;
+let bestScore = parseInt(localStorage.getItem("frustrating_brick_best") || "0");
+let cameraY = 0;
+
+// Ölüm Engelleme
+let shieldStacks = 0;
+const MAX_SHIELD_STACKS = 2;
+let lastEarnedShieldMilestone = 0;
+let invulnerableFrames = 0;
+let shieldBounceEffect = 0;
+
+// Karakter Parametreleri
+const player = {
+  x: V_WIDTH / 2,
+  y: V_HEIGHT / 2 + 25,
+  vx: 0,
+  vy: 0,
+  size: 19,
+  gravity: 0.0670,
+  jumpY: -4.28,
+  jumpX: 0.52,
+  wallSlideSpeed: 0.48,
+  reset() {
+    this.x = V_WIDTH / 2;
+    this.y = V_HEIGHT / 2 + 25;
+    this.vx = 0;
+    this.vy = 0;
+  }
+};
+
+// Engel Parametreleri
+let obstacles = [];
+const TIER_SPACING = 355;
+const GAP_WIDTH = 120;
+const BAR_HEIGHT = 35;
+const SQUARE_SIZE = 24;
+
+// Pause Butonu
+const PAUSE_BTN_X = 26;
+const PAUSE_BTN_Y = 26;
+const PAUSE_BTN_R = 13;
+
+function getTierColor(tierIndex) {
+  const colorIdx = Math.floor(tierIndex / 4) % PALETTES.length;
+  return PALETTES[colorIdx];
+}
+
+function getDiffName(diffIndex) {
+  return I18N[currentLang].diffNames[diffIndex];
+}
+
+function createObstacleTier(y, tierScore) {
+  const margin = 35;
+  const gapCenterX = margin + (GAP_WIDTH / 2) + Math.random() * (V_WIDTH - 2 * margin - GAP_WIDTH);
+  const color = getTierColor(tierScore);
+
+  const gapLeft = gapCenterX - (GAP_WIDTH / 2);
+  const gapRight = gapCenterX + (GAP_WIDTH / 2);
+
+  // 1. Yatay Barlar
+  const rects = [
+    { x: 0, y: y, w: gapLeft, h: BAR_HEIGHT },
+    { x: gapRight, y: y, w: V_WIDTH - gapRight, h: BAR_HEIGHT }
+  ];
+
+  // 2. Slalom Kare Bloklar
+  const diff = DIFFICULTY_CONFIG[currentDifficulty];
+  const inset = diff.hInset;
+
+  const patternType = Math.random();
+  let lowerSquareX, upperSquareX;
+
+  if (patternType < 0.45) {
+    lowerSquareX = gapLeft + inset;
+    upperSquareX = gapRight - SQUARE_SIZE - inset;
+  } else if (patternType < 0.90) {
+    lowerSquareX = gapRight - SQUARE_SIZE - inset;
+    upperSquareX = gapLeft + inset;
+  } else {
+    lowerSquareX = gapCenterX - SQUARE_SIZE / 2;
+    upperSquareX = (Math.random() < 0.5) ? gapLeft + inset : gapRight - SQUARE_SIZE - inset;
+  }
+
+  const lowerOffset = diff.lowerRange[0] + Math.random() * (diff.lowerRange[1] - diff.lowerRange[0]);
+  let upperOffset;
+
+  if (Math.random() < diff.closeChance) {
+    upperOffset = diff.closeRange[0] + Math.random() * (diff.closeRange[1] - diff.closeRange[0]);
+  } else {
+    upperOffset = diff.upperRange[0] + Math.random() * (diff.upperRange[1] - diff.upperRange[0]);
+  }
+
+  // Alt Blok
+  rects.push({
+    x: lowerSquareX,
+    y: y + BAR_HEIGHT + lowerOffset,
+    w: SQUARE_SIZE,
+    h: SQUARE_SIZE
+  });
+
+  // Üst Blok
+  rects.push({
+    x: upperSquareX,
+    y: y - SQUARE_SIZE - upperOffset,
+    w: SQUARE_SIZE,
+    h: SQUARE_SIZE
+  });
+
+  return { y, rects, passed: false, scoreVal: tierScore, color };
+}
+
+function initReadySession() {
+  score = 0;
+  cameraY = 0;
+  shieldStacks = 0;
+  lastEarnedShieldMilestone = 0;
+  invulnerableFrames = 0;
+  shieldBounceEffect = 0;
+  player.reset();
+  obstacles = [];
+
+  const firstObstacleY = -100;
+  for (let i = 0; i < 5; i++) {
+    const y = firstObstacleY - (i * TIER_SPACING);
+    obstacles.push(createObstacleTier(y, i));
+  }
+}
+
+function triggerDeathOrShield() {
+  if (deathPreventionEnabled && shieldStacks > 0) {
+    shieldStacks--;
+    invulnerableFrames = 48;
+    shieldBounceEffect = 22;
+
+    player.vy = -4.9;
+    player.vx = (player.x < V_WIDTH / 2 ? 0.95 : -0.95);
+
+    if (player.y + cameraY > V_HEIGHT) {
+      player.y = (V_HEIGHT * 0.72) - cameraY;
+    }
+    return true;
+  }
+  currentState = STATE.GAMEOVER;
+  return false;
+}
+
+function handleInput(direction, clickX, clickY) {
+  if (currentState === STATE.MENU) {
+    const playBtnX = V_WIDTH / 2 - 80;
+    const playBtnY = V_HEIGHT / 2 + 75;
+    if (clickX >= playBtnX && clickX <= playBtnX + 75 && clickY >= playBtnY && clickY <= playBtnY + 42) {
+      initReadySession();
+      currentState = STATE.READY;
+      return;
+    }
+
+    const distToSettings = Math.hypot(clickX - 325, clickY - 32);
+    if (distToSettings <= 20) {
+      settingsReturnState = STATE.MENU;
+      currentState = STATE.SETTINGS;
+      return;
+    }
+
+    const setBtnX = V_WIDTH / 2 - 60;
+    const setBtnY = V_HEIGHT / 2 + 130;
+    if (clickX >= setBtnX && clickX <= setBtnX + 120 && clickY >= setBtnY && clickY <= setBtnY + 36) {
+      settingsReturnState = STATE.MENU;
+      currentState = STATE.SETTINGS;
+      return;
+    }
+    return;
+  }
+
+  if (currentState === STATE.SETTINGS) {
+    // Dil Seçimi Butonları (EN / TR)
+    const langBtnY = 65;
+    const langBtnH = 34;
+    const enBtnX = V_WIDTH / 2 - 110;
+    const trBtnX = V_WIDTH / 2 + 10;
+    const langBtnW = 100;
+
+    if (clickY >= langBtnY && clickY <= langBtnY + langBtnH) {
+      if (clickX >= enBtnX && clickX <= enBtnX + langBtnW) {
+        currentLang = "en";
+        localStorage.setItem("frustrating_brick_lang", "en");
+        return;
+      }
+      if (clickX >= trBtnX && clickX <= trBtnX + langBtnW) {
+        currentLang = "tr";
+        localStorage.setItem("frustrating_brick_lang", "tr");
+        return;
+      }
+    }
+
+    // 5 Zorluk Butonu
+    const btnX = V_WIDTH / 2 - 120;
+    const btnW = 240;
+    const btnH = 36;
+
+    for (let i = 0; i < 5; i++) {
+      const btnY = 120 + (i * 46);
+      if (clickX >= btnX && clickX <= btnX + btnW && clickY >= btnY && clickY <= btnY + btnH) {
+        currentDifficulty = i;
+        localStorage.setItem("frustrating_brick_diff", currentDifficulty);
+        return;
+      }
+    }
+
+    // Ölüm Engelleme Toggle
+    const toggleY = 370;
+    const toggleH = 46;
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + toggleH) {
+      deathPreventionEnabled = !deathPreventionEnabled;
+      localStorage.setItem("frustrating_brick_dp", deathPreventionEnabled);
+      return;
+    }
+
+    // Geri Butonu
+    const backBtnX = V_WIDTH / 2 - 60;
+    const backBtnY = 445;
+    if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
+      currentState = settingsReturnState;
+      return;
+    }
+    return;
+  }
+
+  if (currentState === STATE.PAUSED) {
+    const btnX = V_WIDTH / 2 - 60;
+    const btnW = 120;
+    const btnH = 42;
+    const homeBtnY = V_HEIGHT / 2 - 45;
+    const resumeBtnY = V_HEIGHT / 2 + 15;
+
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= homeBtnY && clickY <= homeBtnY + btnH) {
+      currentState = STATE.MENU;
+      return;
+    }
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= resumeBtnY && clickY <= resumeBtnY + btnH) {
+      currentState = STATE.PLAYING;
+      return;
+    }
+    return;
+  }
+
+  if (currentState === STATE.GAMEOVER) {
+    const btnY = 400;
+    const btnH = 48;
+
+    // Ana Ekran
+    if (clickX >= 45 && clickX <= 115 && clickY >= btnY && clickY <= btnY + btnH) {
+      currentState = STATE.MENU;
+      return;
+    }
+
+    // Yeniden Başlat
+    if (clickX >= 130 && clickX <= 230 && clickY >= btnY && clickY <= btnY + btnH) {
+      initReadySession();
+      currentState = STATE.READY;
+      return;
+    }
+
+    // Zorluk Ayarları
+    if (clickX >= 245 && clickX <= 315 && clickY >= btnY && clickY <= btnY + btnH) {
+      settingsReturnState = STATE.GAMEOVER;
+      currentState = STATE.SETTINGS;
+      return;
+    }
+    return;
+  }
+
+  if (currentState === STATE.PLAYING) {
+    const distToPause = Math.hypot(clickX - PAUSE_BTN_X, clickY - PAUSE_BTN_Y);
+    if (distToPause <= PAUSE_BTN_R + 10) {
+      currentState = STATE.PAUSED;
+      return;
+    }
+  }
+
+  if (currentState === STATE.READY) {
+    currentState = STATE.PLAYING;
+  }
+
+  if (currentState === STATE.PLAYING) {
+    player.vy = player.jumpY;
+    player.vx = (direction === "left" ? -player.jumpX : player.jumpX);
+  }
+}
+
+function checkCollision(px, py, size, rx, ry, rw, rh) {
+  const r = (size * Math.SQRT2) / 2;
+  const points = [
+    { x: px, y: py - r },
+    { x: px + r, y: py },
+    { x: px, y: py + r },
+    { x: px - r, y: py }
+  ];
+
+  for (const p of points) {
+    if (p.x >= rx && p.x <= rx + rw && p.y >= ry && p.y <= ry + rh) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function update() {
+  if (currentState !== STATE.PLAYING) return;
+
+  player.vy += player.gravity;
+  player.y += player.vy;
+  player.x += player.vx;
+
+  const cornerBound = (player.size * Math.SQRT2) / 2;
+  let isTouchingWall = false;
+
+  if (player.x - cornerBound <= 0) {
+    player.x = cornerBound;
+    player.vx = 0;
+    isTouchingWall = true;
+  } else if (player.x + cornerBound >= V_WIDTH) {
+    player.x = V_WIDTH - cornerBound;
+    player.vx = 0;
+    isTouchingWall = true;
+  }
+
+  if (isTouchingWall && player.vy > 0) {
+    player.vy = Math.min(player.vy, player.wallSlideSpeed);
+  }
+
+  const targetCamY = (V_HEIGHT * 0.58) - player.y;
+  if (targetCamY > cameraY) {
+    cameraY = targetCamY;
+  }
+
+  if (invulnerableFrames > 0) invulnerableFrames--;
+  if (shieldBounceEffect > 0) shieldBounceEffect--;
+
+  if (player.y + cameraY > V_HEIGHT + 40) {
+    if (!triggerDeathOrShield()) return;
+  }
+
+  for (let i = 0; i < obstacles.length; i++) {
+    const obs = obstacles[i];
+
+    if (!obs.passed && player.y < obs.y) {
+      obs.passed = true;
+      score++;
+
+      if (deathPreventionEnabled) {
+        const currentMilestone = Math.floor(score / 50);
+        if (currentMilestone > lastEarnedShieldMilestone) {
+          if (shieldStacks < MAX_SHIELD_STACKS) {
+            shieldStacks = Math.min(MAX_SHIELD_STACKS, shieldStacks + (currentMilestone - lastEarnedShieldMilestone));
+          }
+          lastEarnedShieldMilestone = currentMilestone;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem("frustrating_brick_best", bestScore);
+      }
+    }
+
+    if (invulnerableFrames === 0) {
+      for (const r of obs.rects) {
+        if (checkCollision(player.x, player.y, player.size, r.x, r.y, r.w, r.h)) {
+          if (!triggerDeathOrShield()) return;
+          break;
+        }
+      }
+    }
+
+    if (obs.y + cameraY > V_HEIGHT + 140) {
+      const highestY = Math.min(...obstacles.map(o => o.y));
+      const highestScore = Math.max(...obstacles.map(o => o.scoreVal));
+      obstacles[i] = createObstacleTier(highestY - TIER_SPACING, highestScore + 1);
+    }
+  }
+}
+
+function draw() {
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+  ctx.save();
+  ctx.translate(0, cameraY);
+
+  if (currentState === STATE.PLAYING || currentState === STATE.READY || currentState === STATE.PAUSED) {
+    for (const obs of obstacles) {
+      ctx.fillStyle = obs.color;
+      for (const r of obs.rects) {
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+      }
+    }
+
+    if (shieldBounceEffect > 0) {
+      ctx.strokeStyle = `rgba(255, 175, 20, ${shieldBounceEffect / 22})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, (22 - shieldBounceEffect) * 2.2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (invulnerableFrames === 0 || Math.floor(invulnerableFrames / 4) % 2 === 0) {
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = (invulnerableFrames > 0) ? "#ffa502" : "#0c0c0c";
+      ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+      ctx.restore();
+    }
+  }
+
+  ctx.restore();
+
+  if (currentState === STATE.MENU) {
+    drawMenu();
+  } else if (currentState === STATE.SETTINGS) {
+    drawSettings();
+  } else if (currentState === STATE.READY) {
+    drawReadyTutorial();
+    drawHUD();
+  } else if (currentState === STATE.PLAYING) {
+    drawHUD();
+  } else if (currentState === STATE.PAUSED) {
+    drawHUD();
+    drawPauseMenu();
+  } else if (currentState === STATE.GAMEOVER) {
+    drawGameOver();
+  }
+}
+
+function drawParabolaPath(startX, startY, dir) {
+  ctx.beginPath();
+  const totalFrames = 80;
+  for (let t = 0; t <= totalFrames; t += 2) {
+    const px = startX + (dir * player.jumpX * t * 1.35);
+    const py = startY + (player.jumpY * t) + (0.5 * player.gravity * t * t);
+    if (t === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+
+function drawReadyTutorial() {
+  const px = player.x;
+  const py = player.y;
+
+  ctx.save();
+  ctx.strokeStyle = "#808080";
+  ctx.lineWidth = 1.3;
+  ctx.setLineDash([3, 4]);
+
+  drawParabolaPath(px, py, -1);
+  drawParabolaPath(px, py, 1);
+  ctx.restore();
+
+  const tEnd = 80;
+  const targetXOffset = player.jumpX * tEnd * 1.35;
+  const targetYOffset = (player.jumpY * tEnd) + (0.5 * player.gravity * tEnd * tEnd);
+
+  ctx.fillStyle = "#8a8a8e";
+  
+  ctx.save();
+  ctx.translate(px - targetXOffset, py + targetYOffset);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(px + targetXOffset, py + targetYOffset);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+  ctx.restore();
+
+  const tapY = py + 48;
+
+  ctx.fillStyle = "#e04848";
+  ctx.beginPath();
+  ctx.moveTo(px - 44, tapY - 1);
+  ctx.lineTo(px - 32, tapY - 9);
+  ctx.lineTo(px - 32, tapY + 7);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#555555";
+  ctx.font = "300 24px -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("TAP", px, tapY + 6);
+
+  ctx.fillStyle = "#e04848";
+  ctx.beginPath();
+  ctx.moveTo(px + 44, tapY - 1);
+  ctx.lineTo(px + 32, tapY - 9);
+  ctx.lineTo(px + 32, tapY + 7);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawAngelWings(cx, cy, scale, color = "#ffa502") {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+
+  // Melek Halesi
+  ctx.beginPath();
+  ctx.ellipse(0, -10, 6.5, 2.3, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Sol Kanat
+  ctx.beginPath();
+  ctx.moveTo(-1, 0);
+  ctx.bezierCurveTo(-6, -7, -13, -9, -15, -4);
+  ctx.bezierCurveTo(-14, 0, -10, 2, -13, 5);
+  ctx.bezierCurveTo(-10, 6, -7, 6, -9, 9);
+  ctx.bezierCurveTo(-6, 9, -4, 7, -1, 3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Sağ Kanat
+  ctx.beginPath();
+  ctx.moveTo(1, 0);
+  ctx.bezierCurveTo(6, -7, 13, -9, 15, -4);
+  ctx.bezierCurveTo(14, 0, 10, 2, 13, 5);
+  ctx.bezierCurveTo(10, 6, 7, 6, 9, 9);
+  ctx.bezierCurveTo(6, 9, 4, 7, 1, 3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Merkez Nokta
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(0, 2, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHUD() {
+  ctx.strokeStyle = "#888888";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(PAUSE_BTN_X, PAUSE_BTN_Y, PAUSE_BTN_R, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = "#888888";
+  ctx.fillRect(PAUSE_BTN_X - 3, PAUSE_BTN_Y - 5.5, 1.8, 11);
+  ctx.fillRect(PAUSE_BTN_X + 1.2, PAUSE_BTN_Y - 5.5, 1.8, 11);
+
+  ctx.fillStyle = "#222222";
+  ctx.font = "200 36px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(score, V_WIDTH - 20, 38);
+
+  if (deathPreventionEnabled) {
+    const wingColor = shieldStacks > 0 ? "#ffa502" : "#a4b0be";
+    drawAngelWings(24, V_HEIGHT - 22, 0.95, wingColor);
+
+    ctx.fillStyle = shieldStacks > 0 ? "#2f3542" : "#888888";
+    ctx.font = "bold 13px -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`${shieldStacks}/2`, 44, V_HEIGHT - 17);
+  }
+}
+
+function drawPauseMenu() {
+  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+  const btnX = V_WIDTH / 2 - 60;
+  const btnW = 120;
+  const btnH = 42;
+
+  // Home Butonu
+  ctx.fillStyle = "#5c7cfa";
+  drawRoundRect(btnX, V_HEIGHT / 2 - 45, btnW, btnH, 21, true);
+  
+  ctx.fillStyle = "#ffffff";
+  drawHomeIcon(V_WIDTH / 2, V_HEIGHT / 2 - 24);
+
+  // Resume Butonu
+  ctx.fillStyle = "#55aa55";
+  drawRoundRect(btnX, V_HEIGHT / 2 + 15, btnW, btnH, 21, true);
+  ctx.fillStyle = "#ffffff";
+  drawPlayIcon(V_WIDTH / 2 + 2, V_HEIGHT / 2 + 36, 14);
+}
+
+function drawHomeIcon(hx, hy) {
+  ctx.beginPath();
+  ctx.moveTo(hx, hy - 9);
+  ctx.lineTo(hx - 10, hy);
+  ctx.lineTo(hx - 7, hy);
+  ctx.lineTo(hx - 7, hy + 8);
+  ctx.lineTo(hx + 7, hy + 8);
+  ctx.lineTo(hx + 7, hy);
+  ctx.lineTo(hx + 10, hy);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawGearIcon(cx, cy, r, color = "#888888", innerColor = "#ffffff") {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const teeth = 8;
+  for (let i = 0; i < teeth * 2; i++) {
+    const angle = (i * Math.PI) / teeth;
+    const rad = i % 2 === 0 ? r : r - 3.5;
+    const x = cx + Math.cos(angle) * rad;
+    const y = cy + Math.sin(angle) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = innerColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMenu() {
+  const lang = I18N[currentLang];
+
+  ctx.fillStyle = "#222222";
+  ctx.textAlign = "center";
+
+  // Başlık (Büyütülmüş punto ve daha yukarı konumlandırılmış)
+  ctx.font = "300 38px sans-serif";
+  ctx.fillText("FRUSTRATING", V_WIDTH / 2, V_HEIGHT / 2 - 125);
+  ctx.fillText("BRICK", V_WIDTH / 2, V_HEIGHT / 2 - 85);
+
+  // Karakteri temsil eden kare (Yazının hemen altında, ortada konumlandırıldı)
+  ctx.save();
+  ctx.translate(V_WIDTH / 2, V_HEIGHT / 2 - 40);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-10, -10, 20, 20);
+  ctx.restore();
+
+  // Sağ Üst Ayarlar İkonu
+  drawGearIcon(325, 32, 14, "#888888", "#ffffff");
+
+  // RATE / OYLA
+  ctx.fillStyle = "#c0392b";
+  drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 15, 120, 36, 18, true);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText(lang.rate, V_WIDTH / 2, V_HEIGHT / 2 + 38);
+
+  // PLAY
+  ctx.fillStyle = "#55aa55";
+  drawRoundRect(V_WIDTH / 2 - 80, V_HEIGHT / 2 + 70, 75, 42, 21, true);
+  ctx.fillStyle = "#ffffff";
+  drawPlayIcon(V_WIDTH / 2 - 42, V_HEIGHT / 2 + 91, 14);
+
+  // LEADERBOARD
+  ctx.fillStyle = "#4a69bd";
+  drawRoundRect(V_WIDTH / 2 + 5, V_HEIGHT / 2 + 70, 75, 42, 21, true);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(V_WIDTH / 2 + 25, V_HEIGHT / 2 + 91, 6, 12);
+  ctx.fillRect(V_WIDTH / 2 + 35, V_HEIGHT / 2 + 84, 6, 19);
+  ctx.fillRect(V_WIDTH / 2 + 45, V_HEIGHT / 2 + 88, 6, 15);
+
+  // AYARLAR BUTONU
+  ctx.fillStyle = "#474787";
+  drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 124, 120, 36, 18, true);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 13px sans-serif";
+  ctx.fillText(lang.settings, V_WIDTH / 2, V_HEIGHT / 2 + 147);
+
+  // Aktif Zorluk Etiketi
+  ctx.fillStyle = "#999999";
+  ctx.font = "12px sans-serif";
+  ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOn : ""), V_WIDTH / 2, V_HEIGHT - 65);
+  ctx.fillText("© 2026 AHMETYLC", V_WIDTH / 2, V_HEIGHT - 35);
+}
+
+function drawSettings() {
+  const lang = I18N[currentLang];
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+  // Dil Seçim Butonları (EN / TR)
+  const langBtnY = 65;
+  const langBtnH = 34;
+  const enBtnX = V_WIDTH / 2 - 110;
+  const trBtnX = V_WIDTH / 2 + 10;
+  const langBtnW = 100;
+
+  // English Butonu
+  if (currentLang === "en") {
+    ctx.fillStyle = "#2f3542";
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    ctx.fillStyle = "#ffffff";
+  } else {
+    ctx.fillStyle = "#f5f5f7";
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    ctx.strokeStyle = "#e0e0e0";
+    ctx.lineWidth = 1.3;
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
+    ctx.fillStyle = "#666666";
+  }
+  ctx.font = "bold 13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("ENGLISH", enBtnX + langBtnW / 2, langBtnY + 22);
+
+  // Türkçe Butonu
+  if (currentLang === "tr") {
+    ctx.fillStyle = "#2f3542";
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    ctx.fillStyle = "#ffffff";
+  } else {
+    ctx.fillStyle = "#f5f5f7";
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    ctx.strokeStyle = "#e0e0e0";
+    ctx.lineWidth = 1.3;
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
+    ctx.fillStyle = "#666666";
+  }
+  ctx.font = "bold 13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("TÜRKÇE", trBtnX + langBtnW / 2, langBtnY + 22);
+
+  // 5 Zorluk Seviyesi Butonları
+  const btnX = V_WIDTH / 2 - 120;
+  const btnW = 240;
+  const btnH = 36;
+
+  for (let i = 0; i < 5; i++) {
+    const btnY = 120 + (i * 46);
+    const isSelected = (currentDifficulty === i);
+    const diff = DIFFICULTY_CONFIG[i];
+
+    if (isSelected) {
+      ctx.fillStyle = diff.color;
+      drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(getDiffName(i) + "  ✓", V_WIDTH / 2, btnY + 23);
+    } else {
+      ctx.fillStyle = "#f5f5f7";
+      drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
+
+      ctx.strokeStyle = "#e0e0e0";
+      ctx.lineWidth = 1.3;
+      drawRoundRect(btnX, btnY, btnW, btnH, 18, false, true);
+
+      ctx.fillStyle = "#444444";
+      ctx.font = "13px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(getDiffName(i), V_WIDTH / 2, btnY + 23);
+    }
+  }
+
+  // Ölüm Engelleme Toggle Seçeneği
+  const toggleY = 370;
+  const toggleH = 46;
+
+  ctx.fillStyle = deathPreventionEnabled ? "#fbf8ee" : "#f5f5f7";
+  drawRoundRect(btnX, toggleY, btnW, toggleH, 20, true, false);
+
+  ctx.strokeStyle = deathPreventionEnabled ? "#f1c40f" : "#e0e0e0";
+  ctx.lineWidth = 1.5;
+  drawRoundRect(btnX, toggleY, btnW, toggleH, 20, false, true);
+
+  drawAngelWings(btnX + 26, toggleY + 23, 0.9, deathPreventionEnabled ? "#ffa502" : "#a4b0be");
+
+  ctx.fillStyle = "#333333";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(lang.deathPrev, btnX + 48, toggleY + 28);
+
+  // Checkbox
+  const chkX = btnX + btnW - 32;
+  const chkY = toggleY + 13;
+  ctx.fillStyle = deathPreventionEnabled ? "#2ed573" : "#dcdde1";
+  drawRoundRect(chkX, chkY, 20, 20, 6, true);
+  if (deathPreventionEnabled) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("✓", chkX + 10, chkY + 15);
+  }
+
+  // Geri Butonu
+  const backBtnX = V_WIDTH / 2 - 60;
+  const backBtnY = 445;
+  ctx.fillStyle = "#2c2c54";
+  drawRoundRect(backBtnX, backBtnY, 120, 38, 19, true, false);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(lang.back, V_WIDTH / 2, backBtnY + 24);
+}
+
+function drawRewardBadge(centerX, centerY, scoreVal) {
+  const tier = Math.floor(scoreVal / 10);
+
+  if (tier === 0) {
+    ctx.strokeStyle = "#e2e2e2";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#bbbbbb";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("?", centerX, centerY + 4);
+    return;
+  }
+
+  const badgeColor = REWARD_COLORS[(tier - 1) % REWARD_COLORS.length];
+  const points = 12;
+  const outerR = 23;
+  const innerR = 18;
+
+  ctx.fillStyle = badgeColor;
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i * Math.PI) / points;
+    const x = centerX + Math.cos(angle) * r;
+    const y = centerY + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 11, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = badgeColor;
+  ctx.font = "bold 11px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(tier * 10, centerX, centerY + 4);
+}
+
+function drawGameOver() {
+  const lang = I18N[currentLang];
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+  ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+  ctx.fillStyle = "#222";
+  ctx.font = "300 36px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("GAME OVER", V_WIDTH / 2, 170);
+
+  ctx.strokeStyle = "#d8d8d8";
+  ctx.lineWidth = 1;
+  drawRoundRect(40, 210, V_WIDTH - 80, 160, 20, false, true);
+
+  ctx.font = "16px sans-serif";
+  ctx.fillStyle = "#777";
+  ctx.fillText(lang.score, 90, 245);
+  ctx.fillText(lang.best, 90, 305);
+  ctx.fillText(lang.reward, V_WIDTH - 90, 245);
+
+  ctx.font = "300 28px sans-serif";
+  ctx.fillStyle = "#111";
+  ctx.fillText(score, 90, 278);
+  ctx.fillText(bestScore, 90, 340);
+
+  drawRewardBadge(V_WIDTH - 90, 300, score);
+
+  // Home
+  ctx.fillStyle = "#5c7cfa";
+  drawRoundRect(45, 400, 70, 48, 24, true);
+  ctx.fillStyle = "#ffffff";
+  drawHomeIcon(80, 424);
+
+  // Play
+  ctx.fillStyle = "#55aa55";
+  drawRoundRect(130, 400, 100, 48, 24, true);
+  ctx.fillStyle = "#ffffff";
+  drawPlayIcon(182, 424, 16);
+
+  // Settings
+  ctx.fillStyle = "#474787";
+  drawRoundRect(245, 400, 70, 48, 24, true);
+  drawGearIcon(280, 424, 12, "#ffffff", "#474787");
+
+  // Aktif Zorluk Bilgisi
+  ctx.fillStyle = "#888888";
+  ctx.font = "13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOnShort : ""), V_WIDTH / 2, 478);
+}
+
+function drawPlayIcon(x, y, size) {
+  ctx.beginPath();
+  ctx.moveTo(x - size / 2, y - size / 2);
+  ctx.lineTo(x + size / 2, y);
+  ctx.lineTo(x - size / 2, y + size / 2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+function processInteraction(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = V_WIDTH / rect.width;
+  const scaleY = V_HEIGHT / rect.height;
+
+  const canvasX = (clientX - rect.left) * scaleX;
+  const canvasY = (clientY - rect.top) * scaleY;
+
+  const direction = canvasX < V_WIDTH / 2 ? "left" : "right";
+  handleInput(direction, canvasX, canvasY);
+}
+
+window.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  processInteraction(touch.clientX, touch.clientY);
+}, { passive: false });
+
+window.addEventListener("mousedown", (e) => {
+  processInteraction(e.clientX, e.clientY);
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+    if (currentState === STATE.PLAYING) currentState = STATE.PAUSED;
+    else if (currentState === STATE.PAUSED) currentState = STATE.PLAYING;
+    else if (currentState === STATE.SETTINGS) currentState = settingsReturnState;
+    return;
+  }
+  if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+    handleInput("left", 0, V_HEIGHT / 2);
+  }
+  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+    handleInput("right", V_WIDTH, V_HEIGHT / 2);
+  }
+});
+
+gameLoop();
+</script>
+</body>
+</html>

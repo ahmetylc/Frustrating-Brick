@@ -25,17 +25,19 @@
       height: 100dvh;
       background: #101010;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+    /* Oyun Alanı: Alttaki reklam payı hesaba katılarak oyun içine taşma tamamen engellendi */
     #wrapper {
       position: relative;
-      width: min(100vw, calc(100dvh * (360 / 628)));
-      height: min(100dvh, calc(100vw * (628 / 360)));
-      max-height: 94dvh;
-      max-width: calc(94dvh * (360 / 628));
+      width: min(100vw, calc((100dvh - 56px) * (360 / 628)));
+      height: min(calc(100dvh - 56px), calc(100vw * (628 / 360)));
+      max-height: 88dvh;
+      max-width: calc(88dvh * (360 / 628));
       background: #ffffff;
       border: 1px solid #1c1c1c;
       overflow: hidden;
@@ -47,6 +49,37 @@
       height: 100%;
       touch-action: none;
     }
+    /* Ekranın tam altındaki siyah boşlukta konumlanan Banner Reklam */
+    #ad-banner {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 360px;
+      height: 50px;
+      background: #121212;
+      border-top: 1px solid #242424;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #ad-banner .ad-label {
+      position: absolute;
+      top: 2px;
+      right: 6px;
+      font-size: 8px;
+      color: #555;
+      letter-spacing: 0.5px;
+    }
+    #ad-banner .ad-content {
+      color: #777;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
@@ -55,9 +88,16 @@
   <canvas id="gameCanvas"></canvas>
 </div>
 
+<!-- Sadece Oyun İçi 5. Denemelerde Görünen Banner -->
+<div id="ad-banner">
+  <span class="ad-label">ADVERTISEMENT</span>
+  <div class="ad-content">BANNER AD (320x50)</div>
+</div>
+
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+const adBannerElement = document.getElementById("ad-banner");
 
 const V_WIDTH = 360;
 const V_HEIGHT = 628;
@@ -105,6 +145,8 @@ const I18N = {
     score: "Score",
     best: "Best",
     reward: "Reward",
+    getShieldAd: "+1 SHIELD (AD)",
+    shieldMax: "SHIELD FULL (2/2)",
     diffNames: ["EASY", "MEDIUM", "HARD", "VERY HARD", "INSANE"]
   },
   tr: {
@@ -118,6 +160,8 @@ const I18N = {
     score: "Skor",
     best: "En İyi",
     reward: "Ödül",
+    getShieldAd: "+1 KORUMA AL (REKLAM)",
+    shieldMax: "KORUMA DOLU (2/2)",
     diffNames: ["KOLAY", "ORTA", "ZOR", "ÇOK ZOR", "AŞIRI ZOR"]
   }
 };
@@ -142,6 +186,7 @@ function saveBestScore(diffId, val) {
   localStorage.setItem("frustrating_brick_best_d" + diffId, val);
 }
 
+let attemptCount = parseInt(localStorage.getItem("frustrating_brick_attempts") || "0");
 let deathPreventionEnabled = localStorage.getItem("frustrating_brick_dp") !== "false";
 
 const STATE = {
@@ -192,6 +237,14 @@ const SQUARE_SIZE = 24;
 const PAUSE_BTN_X = 26;
 const PAUSE_BTN_Y = 26;
 const PAUSE_BTN_R = 13;
+
+function updateAdBannerState() {
+  if (!adBannerElement) return;
+  // Sadece oyun esnasında ve 5. denemelerde gösterilir, menülerde kesinlikle kapanır
+  const isGameActive = (currentState === STATE.PLAYING || currentState === STATE.READY);
+  const isFifthAttempt = (attemptCount > 0 && attemptCount % 5 === 0);
+  adBannerElement.style.display = (isGameActive && isFifthAttempt) ? "flex" : "none";
+}
 
 function createOffscreen(w, h, renderFn) {
   const off = document.createElement("canvas");
@@ -292,7 +345,6 @@ function renderHomeToContext(c, hx, hy) {
   c.lineTo(hx - 7, hy);
   c.lineTo(hx - 7, hy + 8);
   c.lineTo(hx + 7, hy + 8);
-  ctx.lineTo?.(hx + 7, hy);
   c.lineTo(hx + 7, hy);
   c.lineTo(hx + 10, hy);
   c.closePath();
@@ -383,6 +435,10 @@ function initReadySession() {
   player.reset();
   obstacles = [];
 
+  attemptCount++;
+  localStorage.setItem("frustrating_brick_attempts", attemptCount);
+  updateAdBannerState();
+
   const firstObstacleY = -100;
   for (let i = 0; i < 5; i++) {
     const y = firstObstacleY - (i * TIER_SPACING);
@@ -405,6 +461,7 @@ function triggerDeathOrShield() {
     return true;
   }
   currentState = STATE.GAMEOVER;
+  updateAdBannerState();
   return false;
 }
 
@@ -412,30 +469,30 @@ function handleInput(direction, clickX, clickY) {
   if (currentState === STATE.PLAYING) {
     if (clickX <= 60 && clickY <= 60) {
       currentState = STATE.PAUSED;
+      updateAdBannerState();
       return;
     }
   }
 
   if (currentState === STATE.MENU) {
-    // Sağ Üst Ayarlar Dişli Çark
     if (clickX >= 290 && clickY <= 65) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
+      updateAdBannerState();
       return;
     }
-    // PLAY Butonu
     if (clickX >= 90 && clickX <= 180 && clickY >= 370 && clickY <= 430) {
       initReadySession();
       currentState = STATE.READY;
+      updateAdBannerState();
       return;
     }
-    // Alt Ayarlar Butonu
     if (clickX >= 110 && clickX <= 250 && clickY >= 430 && clickY <= 480) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
+      updateAdBannerState();
       return;
     }
-    // "MADE BY AHMETYLC" Mail Yönlendirme Alanı
     if (clickY >= V_HEIGHT - 55 && clickY <= V_HEIGHT - 15 && clickX >= 40 && clickX <= V_WIDTH - 40) {
       window.location.href = "mailto:ahmetyalcinsoy@gmail.com";
       return;
@@ -482,6 +539,7 @@ function handleInput(direction, clickX, clickY) {
     const backBtnY = 445;
     if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
       currentState = settingsReturnState;
+      updateAdBannerState();
       return;
     }
     return;
@@ -490,37 +548,60 @@ function handleInput(direction, clickX, clickY) {
   if (currentState === STATE.PAUSED) {
     const btnX = V_WIDTH / 2 - 60;
     const btnW = 120;
-    const btnH = 42;
-    const homeBtnY = V_HEIGHT / 2 - 45;
-    const resumeBtnY = V_HEIGHT / 2 + 15;
+    const btnH = 40;
 
-    if (clickX >= btnX && clickX <= btnX + btnW) {
-      if (clickY >= homeBtnY && clickY <= homeBtnY + btnH) {
-        currentState = STATE.MENU;
-        return;
+    // Home Butonu
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= V_HEIGHT / 2 - 65 && clickY <= V_HEIGHT / 2 - 25) {
+      currentState = STATE.MENU;
+      updateAdBannerState();
+      return;
+    }
+    // Resume Butonu
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= V_HEIGHT / 2 - 15 && clickY <= V_HEIGHT / 2 + 25) {
+      currentState = STATE.PLAYING;
+      updateAdBannerState();
+      return;
+    }
+    // Pause Ekranı +1 Koruma Al (Reklam) Butonu
+    const adBtnX = V_WIDTH / 2 - 95;
+    const adBtnY = V_HEIGHT / 2 + 38;
+    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 190 && clickY >= adBtnY && clickY <= adBtnY + 38) {
+      if (shieldStacks < MAX_SHIELD_STACKS) {
+        shieldStacks = Math.min(MAX_SHIELD_STACKS, shieldStacks + 1);
       }
-      if (clickY >= resumeBtnY && clickY <= resumeBtnY + btnH) {
-        currentState = STATE.PLAYING;
-        return;
-      }
+      return;
     }
     return;
   }
 
   if (currentState === STATE.GAMEOVER) {
-    if (clickY >= 390 && clickY <= 460) {
+    // Game Over Ekranı +1 Koruma Al (Reklam) Butonu
+    const adBtnX = V_WIDTH / 2 - 95;
+    const adBtnY = 362;
+    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 190 && clickY >= adBtnY && clickY <= adBtnY + 38) {
+      if (shieldStacks < MAX_SHIELD_STACKS) {
+        shieldStacks = Math.min(MAX_SHIELD_STACKS, shieldStacks + 1);
+      }
+      return;
+    }
+
+    // Ana Ekran / Yeniden Başlat / Ayarlar Butonları
+    if (clickY >= 412 && clickY <= 462) {
       if (clickX >= 40 && clickX <= 120) {
         currentState = STATE.MENU;
+        updateAdBannerState();
         return;
       }
       if (clickX >= 125 && clickX <= 235) {
         initReadySession();
         currentState = STATE.READY;
+        updateAdBannerState();
         return;
       }
       if (clickX >= 240 && clickX <= 320) {
         settingsReturnState = STATE.GAMEOVER;
         currentState = STATE.SETTINGS;
+        updateAdBannerState();
         return;
       }
     }
@@ -529,6 +610,7 @@ function handleInput(direction, clickX, clickY) {
 
   if (currentState === STATE.READY) {
     currentState = STATE.PLAYING;
+    updateAdBannerState();
   }
 
   if (currentState === STATE.PLAYING) {
@@ -778,20 +860,40 @@ function drawHUD() {
 }
 
 function drawPauseMenu() {
+  const lang = I18N[currentLang];
   setFill("rgba(255, 255, 255, 0.4)");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
   const btnX = V_WIDTH / 2 - 60;
   const btnW = 120;
-  const btnH = 42;
+  const btnH = 40;
 
+  // Home
   setFill("#3867d6");
-  drawRoundRect(btnX, V_HEIGHT / 2 - 45, btnW, btnH, 21, true);
-  ctx.drawImage(CACHE.homeWhite, V_WIDTH / 2 - 12, V_HEIGHT / 2 - 36);
+  drawRoundRect(btnX, V_HEIGHT / 2 - 65, btnW, btnH, 20, true);
+  ctx.drawImage(CACHE.homeWhite, V_WIDTH / 2 - 12, V_HEIGHT / 2 - 55);
 
+  // Resume
   setFill("#20bf6b");
-  drawRoundRect(btnX, V_HEIGHT / 2 + 15, btnW, btnH, 21, true);
-  ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 10, V_HEIGHT / 2 + 24);
+  drawRoundRect(btnX, V_HEIGHT / 2 - 15, btnW, btnH, 20, true);
+  ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 10, V_HEIGHT / 2 - 5);
+
+  // Pause Menüsünde +1 Koruma Al (Reklam) Butonu
+  if (deathPreventionEnabled) {
+    const adBtnX = V_WIDTH / 2 - 95;
+    const adBtnY = V_HEIGHT / 2 + 38;
+    const isMax = shieldStacks >= MAX_SHIELD_STACKS;
+
+    setFill(isMax ? "#a4b0be" : "#ff9f1a");
+    drawRoundRect(adBtnX, adBtnY, 190, 38, 19, true);
+
+    ctx.drawImage(isMax ? CACHE.wingsGray : CACHE.wingsGold, adBtnX + 10, adBtnY + 5);
+
+    setFill("#ffffff");
+    setFont("bold 12px sans-serif");
+    setAlign("center");
+    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 110, adBtnY + 24);
+  }
 }
 
 function drawMenu() {
@@ -811,7 +913,6 @@ function drawMenu() {
   ctx.fillRect(-10, -10, 20, 20);
   ctx.restore();
 
-  // 10 Dişli Mekanik Çark
   ctx.drawImage(CACHE.gearGray, 307, 14);
 
   // RATE
@@ -855,12 +956,10 @@ function drawMenu() {
   setFont("bold 13px sans-serif");
   ctx.fillText(lang.settings, V_WIDTH / 2, V_HEIGHT / 2 + 147);
 
-  // Zorluk Etiketi
   setFill("#888888");
   setFont("12px sans-serif");
   ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOn : ""), V_WIDTH / 2, V_HEIGHT - 65);
 
-  // Tıklanabilir Geliştirici İmzası
   setFill("#555555");
   setFont("500 11px sans-serif");
   ctx.fillText("© 2026 MADE BY AHMETYLC", V_WIDTH / 2, V_HEIGHT - 35);
@@ -1032,44 +1131,62 @@ function drawGameOver() {
   setFill("#111");
   setFont("300 36px sans-serif");
   setAlign("center");
-  ctx.fillText("GAME OVER", V_WIDTH / 2, 170);
+  ctx.fillText("GAME OVER", V_WIDTH / 2, 160);
 
+  // Skor & Ödül Kartı
   setStroke("#d8d8d8");
   ctx.lineWidth = 1;
-  drawRoundRect(40, 210, V_WIDTH - 80, 160, 20, false, true);
+  drawRoundRect(40, 185, V_WIDTH - 80, 155, 18, false, true);
 
   setFont("16px sans-serif");
   setFill("#666");
-  ctx.fillText(lang.score, 90, 245);
-  ctx.fillText(lang.best, 90, 305);
-  ctx.fillText(lang.reward, V_WIDTH - 90, 245);
+  ctx.fillText(lang.score, 90, 220);
+  ctx.fillText(lang.best, 90, 280);
+  ctx.fillText(lang.reward, V_WIDTH - 90, 220);
 
   setFont("300 28px sans-serif");
   setFill("#111");
-  ctx.fillText(score, 90, 278);
-  ctx.fillText(currentBest, 90, 340);
+  ctx.fillText(score, 90, 252);
+  ctx.fillText(currentBest, 90, 314);
 
-  drawRewardBadge(V_WIDTH - 90, 300, score);
+  drawRewardBadge(V_WIDTH - 90, 275, score);
+
+  // Skor Ekranı +1 Koruma Al (Reklam) Butonu
+  if (deathPreventionEnabled) {
+    const adBtnX = V_WIDTH / 2 - 95;
+    const adBtnY = 356;
+    const isMax = shieldStacks >= MAX_SHIELD_STACKS;
+
+    setFill(isMax ? "#a4b0be" : "#ff9f1a");
+    drawRoundRect(adBtnX, adBtnY, 190, 38, 19, true);
+
+    ctx.drawImage(isMax ? CACHE.wingsGray : CACHE.wingsGold, adBtnX + 10, adBtnY + 5);
+
+    setFill("#ffffff");
+    setFont("bold 12px sans-serif");
+    setAlign("center");
+    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 110, adBtnY + 24);
+  }
 
   // 1. Home Butonu
   setFill("#3867d6");
-  drawRoundRect(45, 400, 70, 48, 24, true);
-  ctx.drawImage(CACHE.homeWhite, 68, 412);
+  drawRoundRect(45, 412, 70, 48, 24, true);
+  ctx.drawImage(CACHE.homeWhite, 68, 424);
 
   // 2. Play Butonu
   setFill("#20bf6b");
-  drawRoundRect(130, 400, 100, 48, 24, true);
-  ctx.drawImage(CACHE.playWhiteLg, 166, 410);
+  drawRoundRect(130, 412, 100, 48, 24, true);
+  ctx.drawImage(CACHE.playWhiteLg, 166, 422);
 
   // 3. Settings Butonu
   setFill("#4834d4");
-  drawRoundRect(245, 400, 70, 48, 24, true);
-  ctx.drawImage(CACHE.gearWhite, 262, 406);
+  drawRoundRect(245, 412, 70, 48, 24, true);
+  ctx.drawImage(CACHE.gearWhite, 262, 418);
 
   setFill("#777777");
   setFont("13px sans-serif");
   setAlign("center");
-  ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOnShort : ""), V_WIDTH / 2, 478);
+  ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOnShort : ""), V_WIDTH / 2, 485);
 }
 
 function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
@@ -1106,6 +1223,7 @@ function gameLoop(currentTimestamp) {
 document.addEventListener("visibilitychange", () => {
   lastFrameTime = performance.now();
   smoothDt = 1.0;
+  updateAdBannerState();
 });
 
 canvas.addEventListener("pointerdown", (e) => {
@@ -1136,6 +1254,7 @@ window.addEventListener("keydown", (e) => {
     if (currentState === STATE.PLAYING) currentState = STATE.PAUSED;
     else if (currentState === STATE.PAUSED) currentState = STATE.PLAYING;
     else if (currentState === STATE.SETTINGS) currentState = settingsReturnState;
+    updateAdBannerState();
     return;
   }
 
@@ -1143,14 +1262,17 @@ window.addEventListener("keydown", (e) => {
     if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
       initReadySession();
       currentState = STATE.READY;
+      updateAdBannerState();
       return;
     }
     if (currentState === STATE.SETTINGS) {
       currentState = settingsReturnState;
+      updateAdBannerState();
       return;
     }
     if (currentState === STATE.PAUSED) {
       currentState = STATE.PLAYING;
+      updateAdBannerState();
       return;
     }
     if (currentState === STATE.READY || currentState === STATE.PLAYING) {
@@ -1164,6 +1286,7 @@ window.addEventListener("keydown", (e) => {
     if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
       initReadySession();
       currentState = STATE.READY;
+      updateAdBannerState();
     }
     handleInput("left", 0, V_HEIGHT / 2);
     return;
@@ -1173,6 +1296,7 @@ window.addEventListener("keydown", (e) => {
     if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
       initReadySession();
       currentState = STATE.READY;
+      updateAdBannerState();
     }
     handleInput("right", V_WIDTH, V_HEIGHT / 2);
     return;

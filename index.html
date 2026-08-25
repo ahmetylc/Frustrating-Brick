@@ -70,29 +70,27 @@ function setFill(fill) { if (_curFill !== fill) { ctx.fillStyle = fill; _curFill
 function setStroke(stroke) { if (_curStroke !== stroke) { ctx.strokeStyle = stroke; _curStroke = stroke; } }
 function setAlign(align) { if (_curAlign !== align) { ctx.textAlign = align; _curAlign = align; } }
 
-// Daha Parlak, Doygun ve Canlı Engel Paletleri
 const PALETTES = [
-  "#2979ff", // Elektrik Mavisi
-  "#a55eea", // Canlı Mor
-  "#ff3838", // Parlak Kırmızı
-  "#fbc531", // Canlı Güneş Sarısı
-  "#00e676", // Parlak Neon Yeşil
-  "#00d2d3", // Turkuaz / Camgöbeği
-  "#ff3f8b"  // Canlı Fuşya Pembe
+  "#2979ff",
+  "#a55eea",
+  "#ff3838",
+  "#fbc531",
+  "#00e676",
+  "#00d2d3",
+  "#ff3f8b"
 ];
 
-// Canlılaştırılmış Rozet Renkleri
 const REWARD_COLORS = [
-  "#e58e26", // 10-19: Parlak Bronz / Amber
-  "#1e90ff", // 20-29: Safir Mavi
-  "#9b59b6", // 30-39: Ametist Mor
-  "#ff3838", // 40-49: Yakut Kırmızı
-  "#ff9f1a", // 50-59: Kehribar Turuncu
-  "#00e676", // 60-69: Zümrüt Yeşil
-  "#00d2d3", // 70-79: Elmas Turkuaz
-  "#ff3f8b", // 80-89: Neon Pembe
-  "#f1c40f", // 90-99: Parlak Altın
-  "#1e272e"  // 100+: Obsidyen Siyahı
+  "#e58e26",
+  "#1e90ff",
+  "#9b59b6",
+  "#ff3838",
+  "#ff9f1a",
+  "#00e676",
+  "#00d2d3",
+  "#ff3f8b",
+  "#f1c40f",
+  "#1e272e"
 ];
 
 const I18N = {
@@ -126,7 +124,6 @@ const I18N = {
 
 let currentLang = localStorage.getItem("frustrating_brick_lang") || "en";
 
-// Canlılaştırılmış Zorluk Renkleri
 const DIFFICULTY_CONFIG = [
   { id: 0, color: "#00e676", lowerRange: [22, 42], upperRange: [22, 44], closeChance: 0.85, closeRange: [18, 30], hInset: 3 },
   { id: 1, color: "#1e90ff", lowerRange: [30, 52], upperRange: [30, 54], closeChance: 0.65, closeRange: [24, 40], hInset: 5 },
@@ -137,6 +134,13 @@ const DIFFICULTY_CONFIG = [
 
 let currentDifficulty = parseInt(localStorage.getItem("frustrating_brick_diff") || "1");
 if (currentDifficulty > 4) currentDifficulty = 1;
+
+function getBestScore(diffId = currentDifficulty) {
+  return parseInt(localStorage.getItem("frustrating_brick_best_d" + diffId) || "0");
+}
+function saveBestScore(diffId, val) {
+  localStorage.setItem("frustrating_brick_best_d" + diffId, val);
+}
 
 let deathPreventionEnabled = localStorage.getItem("frustrating_brick_dp") !== "false";
 
@@ -152,7 +156,6 @@ const STATE = {
 let currentState = STATE.MENU;
 let settingsReturnState = STATE.MENU;
 let score = 0;
-let bestScore = parseInt(localStorage.getItem("frustrating_brick_best") || "0");
 let cameraY = 0;
 
 let shieldStacks = 0;
@@ -202,8 +205,8 @@ function createOffscreen(w, h, renderFn) {
 const CACHE = {
   wingsGold: createOffscreen(36, 28, (c, w, h) => renderWingsToContext(c, w / 2, h / 2 + 2, 0.95, "#ff9f1a")),
   wingsGray: createOffscreen(36, 28, (c, w, h) => renderWingsToContext(c, w / 2, h / 2 + 2, 0.95, "#a4b0be")),
-  gearGray: createOffscreen(32, 32, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 14, "#888888", "#ffffff")),
-  gearWhite: createOffscreen(32, 32, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 12, "#ffffff", "#4834d4")),
+  gearGray: createOffscreen(36, 36, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 13.5, "#888888", "#ffffff")),
+  gearWhite: createOffscreen(36, 36, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 11.5, "#ffffff", "#4834d4")),
   homeWhite: createOffscreen(24, 24, (c, w, h) => renderHomeToContext(c, w / 2, h / 2)),
   playWhite: createOffscreen(24, 24, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 14)),
   playWhiteLg: createOffscreen(28, 28, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 16))
@@ -246,25 +249,39 @@ function renderWingsToContext(c, cx, cy, scale, color) {
   c.restore();
 }
 
-function renderGearToContext(c, cx, cy, r, color, innerColor) {
+// 10 Dişli Mekanik Çark Çizimi
+function renderGearToContext(c, cx, cy, outerR, color, innerHoleColor) {
   c.save();
+  c.translate(cx, cy);
   c.fillStyle = color;
+
+  const numTeeth = 10;
+  const innerR = outerR * 0.76;
+  const toothAngle = (Math.PI * 2 / numTeeth) * 0.44;
+  const step = (Math.PI * 2) / numTeeth;
+
   c.beginPath();
-  const teeth = 8;
-  for (let i = 0; i < teeth * 2; i++) {
-    const angle = (i * Math.PI) / teeth;
-    const rad = i % 2 === 0 ? r : r - 3.5;
-    const x = cx + Math.cos(angle) * rad;
-    const y = cy + Math.sin(angle) * rad;
-    if (i === 0) c.moveTo(x, y);
-    else c.lineTo(x, y);
+  for (let i = 0; i < numTeeth; i++) {
+    const angle = i * step;
+    const a1 = angle - toothAngle / 2;
+    const a2 = angle + toothAngle / 2;
+    const nextA1 = angle + step - toothAngle / 2;
+
+    if (i === 0) {
+      c.moveTo(Math.cos(a1) * innerR, Math.sin(a1) * innerR);
+    }
+    c.lineTo(Math.cos(a1) * outerR, Math.sin(a1) * outerR);
+    c.lineTo(Math.cos(a2) * outerR, Math.sin(a2) * outerR);
+    c.lineTo(Math.cos(a2) * innerR, Math.sin(a2) * innerR);
+    c.arc(0, 0, innerR, a2, nextA1);
   }
   c.closePath();
   c.fill();
 
-  c.fillStyle = innerColor;
+  // Merkez Delik
+  c.fillStyle = innerHoleColor;
   c.beginPath();
-  c.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+  c.arc(0, 0, outerR * 0.38, 0, Math.PI * 2);
   c.fill();
   c.restore();
 }
@@ -578,9 +595,8 @@ function update(dt) {
         }
       }
 
-      if (score > bestScore) {
-        bestScore = score;
-        localStorage.setItem("frustrating_brick_best", bestScore);
+      if (score > getBestScore(currentDifficulty)) {
+        saveBestScore(currentDifficulty, score);
       }
     }
 
@@ -762,11 +778,11 @@ function drawPauseMenu() {
   const btnW = 120;
   const btnH = 42;
 
-  setFill("#3867d6"); // Parlak Mavi
+  setFill("#3867d6");
   drawRoundRect(btnX, V_HEIGHT / 2 - 45, btnW, btnH, 21, true);
   ctx.drawImage(CACHE.homeWhite, V_WIDTH / 2 - 12, V_HEIGHT / 2 - 36);
 
-  setFill("#20bf6b"); // Parlak Yeşil
+  setFill("#20bf6b");
   drawRoundRect(btnX, V_HEIGHT / 2 + 15, btnW, btnH, 21, true);
   ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 10, V_HEIGHT / 2 + 24);
 }
@@ -788,30 +804,44 @@ function drawMenu() {
   ctx.fillRect(-10, -10, 20, 20);
   ctx.restore();
 
-  ctx.drawImage(CACHE.gearGray, 309, 16);
+  ctx.drawImage(CACHE.gearGray, 307, 14);
 
   // RATE
-  setFill("#eb3b5a"); // Canlı Kırmızı
+  setFill("#eb3b5a");
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 15, 120, 36, 18, true);
   setFill("#ffffff");
   setFont("bold 14px sans-serif");
   ctx.fillText(lang.rate, V_WIDTH / 2, V_HEIGHT / 2 + 38);
 
   // PLAY
-  setFill("#20bf6b"); // Canlı Yeşil
+  setFill("#20bf6b");
   drawRoundRect(V_WIDTH / 2 - 80, V_HEIGHT / 2 + 70, 75, 42, 21, true);
   ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 54, V_HEIGHT / 2 + 79);
 
   // LEADERBOARD
-  setFill("#3867d6"); // Canlı Mavi
-  drawRoundRect(V_WIDTH / 2 + 5, V_HEIGHT / 2 + 70, 75, 42, 21, true);
+  const lbX = V_WIDTH / 2 + 5;
+  const lbY = V_HEIGHT / 2 + 70;
+  const lbW = 75;
+  const lbH = 42;
+
+  setFill("#3867d6");
+  drawRoundRect(lbX, lbY, lbW, lbH, 21, true);
+
+  const lbCenterX = lbX + lbW / 2;
+  const lbCenterY = lbY + lbH / 2;
+  const barW = 5.5;
+  const barGap = 4;
+  const totalChartW = (3 * barW) + (2 * barGap);
+  const startChartX = lbCenterX - (totalChartW / 2);
+  const baselineY = lbCenterY + 9;
+
   setFill("#ffffff");
-  ctx.fillRect(V_WIDTH / 2 + 25, V_HEIGHT / 2 + 91, 6, 12);
-  ctx.fillRect(V_WIDTH / 2 + 35, V_HEIGHT / 2 + 84, 6, 19);
-  ctx.fillRect(V_WIDTH / 2 + 45, V_HEIGHT / 2 + 88, 6, 15);
+  drawRoundRect(startChartX, baselineY - 11, barW, 11, 1.2, true);
+  drawRoundRect(startChartX + barW + barGap, baselineY - 20, barW, 20, 1.2, true);
+  drawRoundRect(startChartX + (barW + barGap) * 2, baselineY - 15, barW, 15, 1.2, true);
 
   // AYARLAR
-  setFill("#4834d4"); // Canlı İndigo/Mor
+  setFill("#4834d4");
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 124, 120, 36, 18, true);
   setFill("#ffffff");
   setFont("bold 13px sans-serif");
@@ -981,6 +1011,7 @@ function drawRewardBadge(centerX, centerY, scoreVal) {
 
 function drawGameOver() {
   const lang = I18N[currentLang];
+  const currentBest = getBestScore(currentDifficulty);
 
   setFill("rgba(255, 255, 255, 0.96)");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
@@ -1003,24 +1034,24 @@ function drawGameOver() {
   setFont("300 28px sans-serif");
   setFill("#111");
   ctx.fillText(score, 90, 278);
-  ctx.fillText(bestScore, 90, 340);
+  ctx.fillText(currentBest, 90, 340);
 
   drawRewardBadge(V_WIDTH - 90, 300, score);
 
   // 1. Home Butonu
-  setFill("#3867d6"); // Parlak Mavi
+  setFill("#3867d6");
   drawRoundRect(45, 400, 70, 48, 24, true);
   ctx.drawImage(CACHE.homeWhite, 68, 412);
 
   // 2. Play Butonu
-  setFill("#20bf6b"); // Parlak Yeşil
+  setFill("#20bf6b");
   drawRoundRect(130, 400, 100, 48, 24, true);
   ctx.drawImage(CACHE.playWhiteLg, 166, 410);
 
   // 3. Settings Butonu
-  setFill("#4834d4"); // Parlak İndigo
+  setFill("#4834d4");
   drawRoundRect(245, 400, 70, 48, 24, true);
-  ctx.drawImage(CACHE.gearWhite, 264, 408);
+  ctx.drawImage(CACHE.gearWhite, 262, 406);
 
   setFill("#777777");
   setFont("13px sans-serif");
@@ -1051,7 +1082,6 @@ function gameLoop(currentTimestamp) {
   if (frameDuration > 50) frameDuration = 50;
   if (frameDuration < 1) frameDuration = 16.6667;
 
-  // 60Hz / 120Hz Yumuşatma Filtresi
   let targetDt = frameDuration / 16.6667;
   smoothDt += (targetDt - smoothDt) * 0.35;
 

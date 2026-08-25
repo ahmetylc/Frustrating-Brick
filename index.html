@@ -31,7 +31,6 @@
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    /* Oyun Alanı: Alttaki reklam payı hesaba katılarak oyun içine taşma tamamen engellendi */
     #wrapper {
       position: relative;
       width: min(100vw, calc((100dvh - 56px) * (360 / 628)));
@@ -49,7 +48,6 @@
       height: 100%;
       touch-action: none;
     }
-    /* Ekranın tam altındaki siyah boşlukta konumlanan Banner Reklam */
     #ad-banner {
       position: fixed;
       bottom: 0;
@@ -88,7 +86,6 @@
   <canvas id="gameCanvas"></canvas>
 </div>
 
-<!-- Sadece Oyun İçi 5. Denemelerde Görünen Banner -->
 <div id="ad-banner">
   <span class="ad-label">ADVERTISEMENT</span>
   <div class="ad-content">BANNER AD (320x50)</div>
@@ -138,30 +135,36 @@ const I18N = {
     rate: "RATE",
     settings: "SETTINGS",
     diffLabel: "Difficulty: ",
-    shieldOn: " • Shield ON",
-    shieldOnShort: " (Shield ON)",
+    shieldOn: " • Guardian Angel ON",
+    shieldOnShort: " (Guardian Angel ON)",
     back: "BACK",
-    deathPrev: "Death Prevention",
+    deathPrev: "Guardian Angel",
     score: "Score",
     best: "Best",
     reward: "Reward",
-    getShieldAd: "+1 SHIELD (AD)",
-    shieldMax: "SHIELD FULL (2/2)",
+    getShieldAd: "+1 SHIELD",
+    shieldMax: "FULL (2/2)",
+    removeAds: "REMOVE ADS",
+    restorePurchases: "RESTORE",
+    adsRemovedLabel: "ADS REMOVED  ✓",
     diffNames: ["EASY", "MEDIUM", "HARD", "VERY HARD", "INSANE"]
   },
   tr: {
     rate: "OYLA",
     settings: "AYARLAR",
     diffLabel: "Zorluk: ",
-    shieldOn: " • Koruma Açık",
-    shieldOnShort: " (Koruma Açık)",
+    shieldOn: " • Koruyucu Melek Açık",
+    shieldOnShort: " (Koruyucu Melek Açık)",
     back: "GERİ",
-    deathPrev: "Ölüm Engelleme",
+    deathPrev: "Koruyucu Melek",
     score: "Skor",
     best: "En İyi",
     reward: "Ödül",
-    getShieldAd: "+1 KORUMA AL (REKLAM)",
-    shieldMax: "KORUMA DOLU (2/2)",
+    getShieldAd: "+1 KORUMA",
+    shieldMax: "DOLU (2/2)",
+    removeAds: "REKLAMLARI KALDIR",
+    restorePurchases: "GERİ YÜKLE",
+    adsRemovedLabel: "REKLAMLAR KALKTI  ✓",
     diffNames: ["KOLAY", "ORTA", "ZOR", "ÇOK ZOR", "AŞIRI ZOR"]
   }
 };
@@ -186,7 +189,8 @@ function saveBestScore(diffId, val) {
   localStorage.setItem("frustrating_brick_best_d" + diffId, val);
 }
 
-let attemptCount = parseInt(localStorage.getItem("frustrating_brick_attempts") || "0");
+let adsRemoved = localStorage.getItem("frustrating_brick_ads_removed") === "true";
+let attemptCount = 0;
 let deathPreventionEnabled = localStorage.getItem("frustrating_brick_dp") !== "false";
 
 const STATE = {
@@ -240,10 +244,13 @@ const PAUSE_BTN_R = 13;
 
 function updateAdBannerState() {
   if (!adBannerElement) return;
-  // Sadece oyun esnasında ve 5. denemelerde gösterilir, menülerde kesinlikle kapanır
-  const isGameActive = (currentState === STATE.PLAYING || currentState === STATE.READY);
-  const isFifthAttempt = (attemptCount > 0 && attemptCount % 5 === 0);
-  adBannerElement.style.display = (isGameActive && isFifthAttempt) ? "flex" : "none";
+  if (adsRemoved) {
+    adBannerElement.style.display = "none";
+    return;
+  }
+  const isEligibleScreen = (currentState === STATE.PLAYING || currentState === STATE.READY || currentState === STATE.GAMEOVER);
+  const isEligible = (attemptCount >= 10);
+  adBannerElement.style.display = (isEligibleScreen && isEligible) ? "flex" : "none";
 }
 
 function createOffscreen(w, h, renderFn) {
@@ -262,8 +269,39 @@ const CACHE = {
   gearWhite: createOffscreen(36, 36, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 11.5, "#ffffff", "#4834d4")),
   homeWhite: createOffscreen(24, 24, (c, w, h) => renderHomeToContext(c, w / 2, h / 2)),
   playWhite: createOffscreen(24, 24, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 14)),
-  playWhiteLg: createOffscreen(28, 28, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 16))
+  playWhiteLg: createOffscreen(28, 28, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 16)),
+  squarePlayAd: createOffscreen(24, 24, (c, w, h) => renderSquarePlayBadge(c, w / 2, h / 2, false)),
+  squarePlayAdGray: createOffscreen(24, 24, (c, w, h) => renderSquarePlayBadge(c, w / 2, h / 2, true))
 };
+
+function renderSquarePlayBadge(c, cx, cy, isGray) {
+  c.save();
+  c.translate(cx, cy);
+  
+  c.fillStyle = isGray ? "rgba(0, 0, 0, 0.18)" : "rgba(0, 0, 0, 0.22)";
+  drawRoundedRectToContext(c, -11, -11, 22, 22, 4, true);
+
+  c.fillStyle = "#ffffff";
+  c.beginPath();
+  c.moveTo(-3.5, -5.5);
+  c.lineTo(5.5, 0);
+  c.lineTo(-3.5, 5.5);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+function drawRoundedRectToContext(c, x, y, w, h, r, fill = true, stroke = false) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+  if (fill) c.fill();
+  if (stroke) c.stroke();
+}
 
 function renderWingsToContext(c, cx, cy, scale, color) {
   c.save();
@@ -428,7 +466,6 @@ function createObstacleTier(y, tierScore) {
 function initReadySession() {
   score = 0;
   cameraY = 0;
-  shieldStacks = 0;
   lastEarnedShieldMilestone = 0;
   invulnerableTicks = 0;
   shieldBounceTicks = 0;
@@ -436,7 +473,6 @@ function initReadySession() {
   obstacles = [];
 
   attemptCount++;
-  localStorage.setItem("frustrating_brick_attempts", attemptCount);
   updateAdBannerState();
 
   const firstObstacleY = -100;
@@ -501,7 +537,8 @@ function handleInput(direction, clickX, clickY) {
   }
 
   if (currentState === STATE.SETTINGS) {
-    if (clickY >= 60 && clickY <= 105) {
+    // 1. Dil Seçimi
+    if (clickY >= 50 && clickY <= 86) {
       if (clickX >= 65 && clickX <= 175) {
         currentLang = "en";
         localStorage.setItem("frustrating_brick_lang", "en");
@@ -516,29 +553,54 @@ function handleInput(direction, clickX, clickY) {
 
     const btnX = V_WIDTH / 2 - 120;
     const btnW = 240;
-    const btnH = 36;
 
+    // 2. 5 Zorluk Butonu
     for (let i = 0; i < 5; i++) {
-      const btnY = 120 + (i * 46);
-      if (clickX >= btnX && clickX <= btnX + btnW && clickY >= btnY && clickY <= btnY + btnH) {
+      const btnY = 96 + (i * 38);
+      if (clickX >= btnX && clickX <= btnX + btnW && clickY >= btnY && clickY <= btnY + 32) {
         currentDifficulty = i;
         localStorage.setItem("frustrating_brick_diff", currentDifficulty);
         return;
       }
     }
 
-    const toggleY = 370;
-    const toggleH = 46;
-    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + toggleH) {
+    // 3. Koruyucu Melek (Guardian Angel)
+    const toggleY = 292;
+    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + 38) {
       deathPreventionEnabled = !deathPreventionEnabled;
       localStorage.setItem("frustrating_brick_dp", deathPreventionEnabled);
       return;
     }
 
+    // 4. Geri (Back) Butonu
     const backBtnX = V_WIDTH / 2 - 60;
-    const backBtnY = 445;
-    if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
+    const backBtnY = 345;
+    if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 36) {
       currentState = settingsReturnState;
+      updateAdBannerState();
+      return;
+    }
+
+    // 5. Yan Yana Alt Butonlar
+    const botBtnY = 412;
+    const botBtnH = 36;
+    const btn1X = 35;
+    const btn1W = 140;
+    const btn2X = 185;
+    const btn2W = 140;
+
+    // Reklamları Kaldır
+    if (clickX >= btn1X && clickX <= btn1X + btn1W && clickY >= botBtnY && clickY <= botBtnY + botBtnH) {
+      adsRemoved = true;
+      localStorage.setItem("frustrating_brick_ads_removed", "true");
+      updateAdBannerState();
+      return;
+    }
+
+    // Satın Alımları Geri Yükle / Reklamları Geri Getir
+    if (clickX >= btn2X && clickX <= btn2X + btn2W && clickY >= botBtnY && clickY <= botBtnY + botBtnH) {
+      adsRemoved = false;
+      localStorage.setItem("frustrating_brick_ads_removed", "false");
       updateAdBannerState();
       return;
     }
@@ -550,22 +612,21 @@ function handleInput(direction, clickX, clickY) {
     const btnW = 120;
     const btnH = 40;
 
-    // Home Butonu
     if (clickX >= btnX && clickX <= btnX + btnW && clickY >= V_HEIGHT / 2 - 65 && clickY <= V_HEIGHT / 2 - 25) {
       currentState = STATE.MENU;
       updateAdBannerState();
       return;
     }
-    // Resume Butonu
     if (clickX >= btnX && clickX <= btnX + btnW && clickY >= V_HEIGHT / 2 - 15 && clickY <= V_HEIGHT / 2 + 25) {
       currentState = STATE.PLAYING;
       updateAdBannerState();
       return;
     }
-    // Pause Ekranı +1 Koruma Al (Reklam) Butonu
-    const adBtnX = V_WIDTH / 2 - 95;
-    const adBtnY = V_HEIGHT / 2 + 38;
-    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 190 && clickY >= adBtnY && clickY <= adBtnY + 38) {
+    
+    // Pause Menüsü +1 Koruma Butonu (120x40 Standart Boyut)
+    const adBtnX = V_WIDTH / 2 - 60;
+    const adBtnY = V_HEIGHT / 2 + 35;
+    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 120 && clickY >= adBtnY && clickY <= adBtnY + 40) {
       if (shieldStacks < MAX_SHIELD_STACKS) {
         shieldStacks = Math.min(MAX_SHIELD_STACKS, shieldStacks + 1);
       }
@@ -575,20 +636,20 @@ function handleInput(direction, clickX, clickY) {
   }
 
   if (currentState === STATE.GAMEOVER) {
-    // Game Over Ekranı +1 Koruma Al (Reklam) Butonu
-    const adBtnX = V_WIDTH / 2 - 95;
-    const adBtnY = 362;
-    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 190 && clickY >= adBtnY && clickY <= adBtnY + 38) {
+    // Game Over Ekranı +1 Koruma Butonu (120x40 Standart Boyut)
+    const adBtnX = V_WIDTH / 2 - 60;
+    const adBtnY = 352;
+    if (deathPreventionEnabled && clickX >= adBtnX && clickX <= adBtnX + 120 && clickY >= adBtnY && clickY <= adBtnY + 40) {
       if (shieldStacks < MAX_SHIELD_STACKS) {
         shieldStacks = Math.min(MAX_SHIELD_STACKS, shieldStacks + 1);
       }
       return;
     }
 
-    // Ana Ekran / Yeniden Başlat / Ayarlar Butonları
     if (clickY >= 412 && clickY <= 462) {
       if (clickX >= 40 && clickX <= 120) {
         currentState = STATE.MENU;
+        shieldStacks = 0;
         updateAdBannerState();
         return;
       }
@@ -868,31 +929,31 @@ function drawPauseMenu() {
   const btnW = 120;
   const btnH = 40;
 
-  // Home
+  // Home Butonu
   setFill("#3867d6");
   drawRoundRect(btnX, V_HEIGHT / 2 - 65, btnW, btnH, 20, true);
   ctx.drawImage(CACHE.homeWhite, V_WIDTH / 2 - 12, V_HEIGHT / 2 - 55);
 
-  // Resume
+  // Resume Butonu
   setFill("#20bf6b");
   drawRoundRect(btnX, V_HEIGHT / 2 - 15, btnW, btnH, 20, true);
   ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 10, V_HEIGHT / 2 - 5);
 
-  // Pause Menüsünde +1 Koruma Al (Reklam) Butonu
+  // +1 Koruma Butonu (120x40 ile Tam Aynı Boyut)
   if (deathPreventionEnabled) {
-    const adBtnX = V_WIDTH / 2 - 95;
-    const adBtnY = V_HEIGHT / 2 + 38;
+    const adBtnX = V_WIDTH / 2 - 60;
+    const adBtnY = V_HEIGHT / 2 + 35;
     const isMax = shieldStacks >= MAX_SHIELD_STACKS;
 
     setFill(isMax ? "#a4b0be" : "#ff9f1a");
-    drawRoundRect(adBtnX, adBtnY, 190, 38, 19, true);
+    drawRoundRect(adBtnX, adBtnY, 120, 40, 20, true);
 
-    ctx.drawImage(isMax ? CACHE.wingsGray : CACHE.wingsGold, adBtnX + 10, adBtnY + 5);
+    ctx.drawImage(isMax ? CACHE.squarePlayAdGray : CACHE.squarePlayAd, adBtnX + 8, adBtnY + 8);
 
     setFill("#ffffff");
-    setFont("bold 12px sans-serif");
+    setFont("bold 11px sans-serif");
     setAlign("center");
-    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 110, adBtnY + 24);
+    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 68, adBtnY + 25);
   }
 }
 
@@ -970,109 +1031,142 @@ function drawSettings() {
   setFill("#ffffff");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
-  const langBtnY = 65;
-  const langBtnH = 34;
+  // 1. DİL SEÇİMİ
+  const langBtnY = 50;
+  const langBtnH = 32;
   const enBtnX = V_WIDTH / 2 - 110;
   const trBtnX = V_WIDTH / 2 + 10;
   const langBtnW = 100;
 
-  setFont("bold 13px sans-serif");
+  setFont("bold 12px sans-serif");
   setAlign("center");
 
   if (currentLang === "en") {
     setFill("#1e272e");
-    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 16, true, false);
     setFill("#ffffff");
   } else {
     setFill("#f5f5f7");
-    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 16, true, false);
     setStroke("#e0e0e0");
     ctx.lineWidth = 1.3;
-    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
+    drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 16, false, true);
     setFill("#555555");
   }
-  ctx.fillText("ENGLISH", enBtnX + langBtnW / 2, langBtnY + 22);
+  ctx.fillText("ENGLISH", enBtnX + langBtnW / 2, langBtnY + 21);
 
   if (currentLang === "tr") {
     setFill("#1e272e");
-    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 16, true, false);
     setFill("#ffffff");
   } else {
     setFill("#f5f5f7");
-    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 16, true, false);
     setStroke("#e0e0e0");
     ctx.lineWidth = 1.3;
-    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
+    drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 16, false, true);
     setFill("#555555");
   }
-  ctx.fillText("TÜRKÇE", trBtnX + langBtnW / 2, langBtnY + 22);
+  ctx.fillText("TÜRKÇE", trBtnX + langBtnW / 2, langBtnY + 21);
 
   const btnX = V_WIDTH / 2 - 120;
   const btnW = 240;
-  const btnH = 36;
 
+  // 2. 5 ZORLUK SEVİYESİ
   for (let i = 0; i < 5; i++) {
-    const btnY = 120 + (i * 46);
+    const btnY = 96 + (i * 38);
     const isSelected = (currentDifficulty === i);
     const diff = DIFFICULTY_CONFIG[i];
 
     if (isSelected) {
       setFill(diff.color);
-      drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
+      drawRoundRect(btnX, btnY, btnW, 32, 16, true, false);
 
       setFill("#ffffff");
-      setFont("bold 14px sans-serif");
-      ctx.fillText(getDiffName(i) + "  ✓", V_WIDTH / 2, btnY + 23);
+      setFont("bold 13px sans-serif");
+      ctx.fillText(getDiffName(i) + "  ✓", V_WIDTH / 2, btnY + 21);
     } else {
       setFill("#f5f5f7");
-      drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
+      drawRoundRect(btnX, btnY, btnW, 32, 16, true, false);
 
       setStroke("#e0e0e0");
       ctx.lineWidth = 1.3;
-      drawRoundRect(btnX, btnY, btnW, btnH, 18, false, true);
+      drawRoundRect(btnX, btnY, btnW, 32, 16, false, true);
 
       setFill("#333333");
-      setFont("13px sans-serif");
-      ctx.fillText(getDiffName(i), V_WIDTH / 2, btnY + 23);
+      setFont("12px sans-serif");
+      ctx.fillText(getDiffName(i), V_WIDTH / 2, btnY + 21);
     }
   }
 
-  const toggleY = 370;
-  const toggleH = 46;
-
+  // 3. KORUYUCU MELEK (GUARDIAN ANGEL)
+  const toggleY = 292;
   setFill(deathPreventionEnabled ? "#fff9e6" : "#f5f5f7");
-  drawRoundRect(btnX, toggleY, btnW, toggleH, 20, true, false);
+  drawRoundRect(btnX, toggleY, btnW, 38, 19, true, false);
 
   setStroke(deathPreventionEnabled ? "#f1c40f" : "#e0e0e0");
   ctx.lineWidth = 1.5;
-  drawRoundRect(btnX, toggleY, btnW, toggleH, 20, false, true);
+  drawRoundRect(btnX, toggleY, btnW, 38, 19, false, true);
 
-  ctx.drawImage(deathPreventionEnabled ? CACHE.wingsGold : CACHE.wingsGray, btnX + 8, toggleY + 9);
+  ctx.drawImage(deathPreventionEnabled ? CACHE.wingsGold : CACHE.wingsGray, btnX + 8, toggleY + 5);
 
   setFill("#222222");
-  setFont("bold 14px sans-serif");
+  setFont("bold 13px sans-serif");
   setAlign("left");
-  ctx.fillText(lang.deathPrev, btnX + 48, toggleY + 28);
+  ctx.fillText(lang.deathPrev, btnX + 48, toggleY + 24);
 
-  const chkX = btnX + btnW - 32;
-  const chkY = toggleY + 13;
+  const chkX = btnX + btnW - 30;
+  const chkY = toggleY + 10;
   setFill(deathPreventionEnabled ? "#00e676" : "#dcdde1");
-  drawRoundRect(chkX, chkY, 20, 20, 6, true);
+  drawRoundRect(chkX, chkY, 18, 18, 5, true);
   if (deathPreventionEnabled) {
     setFill("#ffffff");
-    setFont("bold 13px sans-serif");
+    setFont("bold 12px sans-serif");
     setAlign("center");
-    ctx.fillText("✓", chkX + 10, chkY + 15);
+    ctx.fillText("✓", chkX + 9, chkY + 14);
   }
 
+  // 4. GERİ (BACK) BUTONU
   const backBtnX = V_WIDTH / 2 - 60;
-  const backBtnY = 445;
+  const backBtnY = 345;
   setFill("#1e272e");
-  drawRoundRect(backBtnX, backBtnY, 120, 38, 19, true, false);
+  drawRoundRect(backBtnX, backBtnY, 120, 36, 18, true, false);
   setFill("#ffffff");
-  setFont("bold 14px sans-serif");
+  setFont("bold 13px sans-serif");
   setAlign("center");
-  ctx.fillText(lang.back, V_WIDTH / 2, backBtnY + 24);
+  ctx.fillText(lang.back, V_WIDTH / 2, backBtnY + 23);
+
+  // 5. YAN YANA REKLAMLARI KALDIR & GERİ YÜKLE BUTONLARI (BACK BUTONUNUN ALTINDA)
+  const botBtnY = 412;
+  const botBtnH = 36;
+  const btn1X = 35;
+  const btn1W = 140;
+  const btn2X = 185;
+  const btn2W = 140;
+
+  // Sol Buton: Remove Ads
+  setFill(adsRemoved ? "#e8f8f0" : "#f5f5f7");
+  drawRoundRect(btn1X, botBtnY, btn1W, botBtnH, 18, true, false);
+  setStroke(adsRemoved ? "#00e676" : "#e0e0e0");
+  ctx.lineWidth = 1.3;
+  drawRoundRect(btn1X, botBtnY, btn1W, botBtnH, 18, false, true);
+
+  setFill(adsRemoved ? "#00a854" : "#2f3542");
+  setFont("bold 10.5px sans-serif");
+  setAlign("center");
+  ctx.fillText(adsRemoved ? lang.adsRemovedLabel : lang.removeAds, btn1X + btn1W / 2, botBtnY + 23);
+
+  // Sağ Buton: Restore Purchases (Reklamları Geri Getirme Butonu)
+  setFill(!adsRemoved ? "#e8f8f0" : "#f5f5f7");
+  drawRoundRect(btn2X, botBtnY, btn2W, botBtnH, 18, true, false);
+  setStroke(!adsRemoved ? "#3867d6" : "#e0e0e0");
+  ctx.lineWidth = 1.3;
+  drawRoundRect(btn2X, botBtnY, btn2W, botBtnH, 18, false, true);
+
+  setFill(!adsRemoved ? "#3867d6" : "#57606f");
+  setFont("bold 11px sans-serif");
+  setAlign("center");
+  ctx.fillText(lang.restorePurchases, btn2X + btn2W / 2, botBtnY + 23);
 }
 
 function drawRewardBadge(centerX, centerY, scoreVal) {
@@ -1133,7 +1227,6 @@ function drawGameOver() {
   setAlign("center");
   ctx.fillText("GAME OVER", V_WIDTH / 2, 160);
 
-  // Skor & Ödül Kartı
   setStroke("#d8d8d8");
   ctx.lineWidth = 1;
   drawRoundRect(40, 185, V_WIDTH - 80, 155, 18, false, true);
@@ -1151,21 +1244,21 @@ function drawGameOver() {
 
   drawRewardBadge(V_WIDTH - 90, 275, score);
 
-  // Skor Ekranı +1 Koruma Al (Reklam) Butonu
+  // +1 Koruma Butonu (120x40 ile Tam Aynı Boyut)
   if (deathPreventionEnabled) {
-    const adBtnX = V_WIDTH / 2 - 95;
-    const adBtnY = 356;
+    const adBtnX = V_WIDTH / 2 - 60;
+    const adBtnY = 352;
     const isMax = shieldStacks >= MAX_SHIELD_STACKS;
 
     setFill(isMax ? "#a4b0be" : "#ff9f1a");
-    drawRoundRect(adBtnX, adBtnY, 190, 38, 19, true);
+    drawRoundRect(adBtnX, adBtnY, 120, 40, 20, true);
 
-    ctx.drawImage(isMax ? CACHE.wingsGray : CACHE.wingsGold, adBtnX + 10, adBtnY + 5);
+    ctx.drawImage(isMax ? CACHE.squarePlayAdGray : CACHE.squarePlayAd, adBtnX + 8, adBtnY + 8);
 
     setFill("#ffffff");
-    setFont("bold 12px sans-serif");
+    setFont("bold 11px sans-serif");
     setAlign("center");
-    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 110, adBtnY + 24);
+    ctx.fillText(isMax ? lang.shieldMax : lang.getShieldAd, adBtnX + 68, adBtnY + 25);
   }
 
   // 1. Home Butonu

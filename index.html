@@ -37,7 +37,7 @@
       max-height: 94dvh;
       max-width: calc(94dvh * (360 / 628));
       background: #ffffff;
-      box-shadow: 0 0 35px rgba(0,0,0,0.8);
+      border: 1px solid #222222;
       overflow: hidden;
       contain: strict;
     }
@@ -63,6 +63,13 @@ const V_WIDTH = 360;
 const V_HEIGHT = 628;
 canvas.width = V_WIDTH;
 canvas.height = V_HEIGHT;
+
+// State Tracking ile Gereksiz Canvas String Parse Yükünü Önleme
+let _curFont = "", _curFill = "", _curStroke = "", _curAlign = "";
+function setFont(font) { if (_curFont !== font) { ctx.font = font; _curFont = font; } }
+function setFill(fill) { if (_curFill !== fill) { ctx.fillStyle = fill; _curFill = fill; } }
+function setStroke(stroke) { if (_curStroke !== stroke) { ctx.strokeStyle = stroke; _curStroke = stroke; } }
+function setAlign(align) { if (_curAlign !== align) { ctx.textAlign = align; _curAlign = align; } }
 
 const PALETTES = [
   "#86b6fe",
@@ -181,6 +188,110 @@ const PAUSE_BTN_X = 26;
 const PAUSE_BTN_Y = 26;
 const PAUSE_BTN_R = 13;
 
+// Vektörel Şekiller İçin Offscreen Canvas Önbelleği
+function createOffscreen(w, h, renderFn) {
+  const off = document.createElement("canvas");
+  off.width = w;
+  off.height = h;
+  const oCtx = off.getContext("2d");
+  renderFn(oCtx, w, h);
+  return off;
+}
+
+const CACHE = {
+  wingsGold: createOffscreen(36, 28, (c, w, h) => renderWingsToContext(c, w / 2, h / 2 + 2, 0.95, "#ffa502")),
+  wingsGray: createOffscreen(36, 28, (c, w, h) => renderWingsToContext(c, w / 2, h / 2 + 2, 0.95, "#a4b0be")),
+  gearGray: createOffscreen(32, 32, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 14, "#888888", "#ffffff")),
+  gearWhite: createOffscreen(32, 32, (c, w, h) => renderGearToContext(c, w / 2, h / 2, 12, "#ffffff", "#474787")),
+  homeWhite: createOffscreen(24, 24, (c, w, h) => renderHomeToContext(c, w / 2, h / 2)),
+  playWhite: createOffscreen(24, 24, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 14)),
+  playWhiteLg: createOffscreen(28, 28, (c, w, h) => renderPlayToContext(c, w / 2, h / 2, 16))
+};
+
+function renderWingsToContext(c, cx, cy, scale, color) {
+  c.save();
+  c.translate(cx, cy);
+  c.scale(scale, scale);
+  c.fillStyle = color;
+  c.strokeStyle = color;
+  c.lineWidth = 1.6;
+
+  c.beginPath();
+  c.ellipse(0, -10, 6.5, 2.3, 0, 0, Math.PI * 2);
+  c.stroke();
+
+  c.beginPath();
+  c.moveTo(-1, 0);
+  c.bezierCurveTo(-6, -7, -13, -9, -15, -4);
+  c.bezierCurveTo(-14, 0, -10, 2, -13, 5);
+  c.bezierCurveTo(-10, 6, -7, 6, -9, 9);
+  c.bezierCurveTo(-6, 9, -4, 7, -1, 3);
+  c.closePath();
+  c.fill();
+
+  c.beginPath();
+  c.moveTo(1, 0);
+  c.bezierCurveTo(6, -7, 13, -9, 15, -4);
+  c.bezierCurveTo(14, 0, 10, 2, 13, 5);
+  c.bezierCurveTo(10, 6, 7, 6, 9, 9);
+  c.bezierCurveTo(6, 9, 4, 7, 1, 3);
+  c.closePath();
+  c.fill();
+
+  c.fillStyle = "#ffffff";
+  c.beginPath();
+  c.arc(0, 2, 2.2, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+function renderGearToContext(c, cx, cy, r, color, innerColor) {
+  c.save();
+  c.fillStyle = color;
+  c.beginPath();
+  const teeth = 8;
+  for (let i = 0; i < teeth * 2; i++) {
+    const angle = (i * Math.PI) / teeth;
+    const rad = i % 2 === 0 ? r : r - 3.5;
+    const x = cx + Math.cos(angle) * rad;
+    const y = cy + Math.sin(angle) * rad;
+    if (i === 0) c.moveTo(x, y);
+    else c.lineTo(x, y);
+  }
+  c.closePath();
+  c.fill();
+
+  c.fillStyle = innerColor;
+  c.beginPath();
+  c.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+function renderHomeToContext(c, hx, hy) {
+  c.fillStyle = "#ffffff";
+  c.beginPath();
+  c.moveTo(hx, hy - 9);
+  c.lineTo(hx - 10, hy);
+  c.lineTo(hx - 7, hy);
+  c.lineTo(hx - 7, hy + 8);
+  c.lineTo(hx + 7, hy + 8);
+  c.lineTo(hx + 7, hy);
+  c.lineTo(hx + 10, hy);
+  c.closePath();
+  c.fill();
+}
+
+function renderPlayToContext(c, x, y, size) {
+  c.fillStyle = "#ffffff";
+  c.beginPath();
+  c.moveTo(x - size / 2, y - size / 2);
+  c.lineTo(x + size / 2, y);
+  c.lineTo(x - size / 2, y + size / 2);
+  c.closePath();
+  c.fill();
+}
+
 function getTierColor(tierIndex) {
   return PALETTES[Math.floor(tierIndex / 4) % PALETTES.length];
 }
@@ -281,7 +392,6 @@ function triggerDeathOrShield() {
 }
 
 function handleInput(direction, clickX, clickY) {
-  // 1. OYUN İÇİNDE PAUSE BUTONU
   if (currentState === STATE.PLAYING) {
     if (clickX <= 60 && clickY <= 60) {
       currentState = STATE.PAUSED;
@@ -289,23 +399,17 @@ function handleInput(direction, clickX, clickY) {
     }
   }
 
-  // 2. ANA MENÜ
   if (currentState === STATE.MENU) {
-    // Sağ Üst Ayarlar Dişli Çark
     if (clickX >= 290 && clickY <= 65) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
       return;
     }
-
-    // PLAY Butonu
     if (clickX >= 90 && clickX <= 180 && clickY >= 370 && clickY <= 430) {
       initReadySession();
       currentState = STATE.READY;
       return;
     }
-
-    // Alt Ayarlar Butonu
     if (clickX >= 110 && clickX <= 250 && clickY >= 430 && clickY <= 480) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
@@ -314,9 +418,7 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
-  // 3. AYARLAR EKRANI
   if (currentState === STATE.SETTINGS) {
-    // Dil Butonları
     if (clickY >= 60 && clickY <= 105) {
       if (clickX >= 65 && clickX <= 175) {
         currentLang = "en";
@@ -330,7 +432,6 @@ function handleInput(direction, clickX, clickY) {
       }
     }
 
-    // 5 Zorluk Butonu
     const btnX = V_WIDTH / 2 - 120;
     const btnW = 240;
     const btnH = 36;
@@ -344,7 +445,6 @@ function handleInput(direction, clickX, clickY) {
       }
     }
 
-    // Ölüm Engelleme Kutusu
     const toggleY = 370;
     const toggleH = 46;
     if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + toggleH) {
@@ -353,7 +453,6 @@ function handleInput(direction, clickX, clickY) {
       return;
     }
 
-    // Geri Butonu
     const backBtnX = V_WIDTH / 2 - 60;
     const backBtnY = 445;
     if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
@@ -363,13 +462,12 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
-  // 4. PAUSE MENÜSÜ
   if (currentState === STATE.PAUSED) {
-    const btnX = V_WIDTH / 2 - 60; // 120
+    const btnX = V_WIDTH / 2 - 60;
     const btnW = 120;
     const btnH = 42;
-    const homeBtnY = V_HEIGHT / 2 - 45; // 269
-    const resumeBtnY = V_HEIGHT / 2 + 15; // 329
+    const homeBtnY = V_HEIGHT / 2 - 45;
+    const resumeBtnY = V_HEIGHT / 2 + 15;
 
     if (clickX >= btnX && clickX <= btnX + btnW) {
       if (clickY >= homeBtnY && clickY <= homeBtnY + btnH) {
@@ -384,21 +482,17 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
-  // 5. GAME OVER EKRANI (Butonlar)
   if (currentState === STATE.GAMEOVER) {
     if (clickY >= 390 && clickY <= 460) {
-      // 1. Ana Ekran (Home) Butonu
       if (clickX >= 40 && clickX <= 120) {
         currentState = STATE.MENU;
         return;
       }
-      // 2. Yeniden Başlat (Play) Butonu
       if (clickX >= 125 && clickX <= 235) {
         initReadySession();
         currentState = STATE.READY;
         return;
       }
-      // 3. Zorluk Ayarları Butonu
       if (clickX >= 240 && clickX <= 320) {
         settingsReturnState = STATE.GAMEOVER;
         currentState = STATE.SETTINGS;
@@ -408,7 +502,6 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
-  // 6. OYNANIŞ (Zıplama)
   if (currentState === STATE.READY) {
     currentState = STATE.PLAYING;
   }
@@ -431,12 +524,13 @@ function checkCollision(px, py, r, rx, ry, rw, rh) {
   return false;
 }
 
-function fixedPhysicsUpdate() {
+// 60Hz, 90Hz, 120Hz ve Değişken Kare Hızları İçin Pürüzsüz Delta Time Hareketi
+function update(dt) {
   if (currentState !== STATE.PLAYING) return;
 
-  player.vy += player.gravity;
-  player.y += player.vy;
-  player.x += player.vx;
+  player.vy += player.gravity * dt;
+  player.y += player.vy * dt;
+  player.x += player.vx * dt;
 
   const cornerBound = player.radius;
   let isTouchingWall = false;
@@ -460,8 +554,8 @@ function fixedPhysicsUpdate() {
     cameraY = targetCamY;
   }
 
-  if (invulnerableTicks > 0) invulnerableTicks--;
-  if (shieldBounceTicks > 0) shieldBounceTicks--;
+  if (invulnerableTicks > 0) invulnerableTicks = Math.max(0, invulnerableTicks - dt);
+  if (shieldBounceTicks > 0) shieldBounceTicks = Math.max(0, shieldBounceTicks - dt);
 
   if (player.y + cameraY > V_HEIGHT + 40) {
     if (!triggerDeathOrShield()) return;
@@ -490,7 +584,7 @@ function fixedPhysicsUpdate() {
       }
     }
 
-    if (invulnerableTicks === 0) {
+    if (invulnerableTicks <= 0) {
       for (let j = 0; j < obs.rects.length; j++) {
         const r = obs.rects[j];
         if (checkCollision(player.x, player.y, player.radius, r.x, r.y, r.w, r.h)) {
@@ -513,7 +607,7 @@ function fixedPhysicsUpdate() {
 }
 
 function draw() {
-  ctx.fillStyle = "#ffffff";
+  setFill("#ffffff");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
   ctx.save();
@@ -522,7 +616,7 @@ function draw() {
   if (currentState === STATE.PLAYING || currentState === STATE.READY || currentState === STATE.PAUSED) {
     for (let i = 0; i < obstacles.length; i++) {
       const obs = obstacles[i];
-      ctx.fillStyle = obs.color;
+      setFill(obs.color);
       for (let j = 0; j < obs.rects.length; j++) {
         const r = obs.rects[j];
         ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -530,18 +624,18 @@ function draw() {
     }
 
     if (shieldBounceTicks > 0) {
-      ctx.strokeStyle = `rgba(255, 175, 20, ${shieldBounceTicks / 22})`;
+      setStroke(`rgba(255, 175, 20, ${shieldBounceTicks / 22})`);
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(player.x, player.y, (22 - shieldBounceTicks) * 2.2, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    if (invulnerableTicks === 0 || Math.floor(invulnerableTicks / 4) % 2 === 0) {
+    if (invulnerableTicks <= 0 || Math.floor(invulnerableTicks / 4) % 2 === 0) {
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = (invulnerableTicks > 0) ? "#ffa502" : "#0c0c0c";
+      setFill(invulnerableTicks > 0 ? "#ffa502" : "#0c0c0c");
       ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
       ctx.restore();
     }
@@ -583,7 +677,7 @@ function drawReadyTutorial() {
   const py = player.y;
 
   ctx.save();
-  ctx.strokeStyle = "#808080";
+  setStroke("#808080");
   ctx.lineWidth = 1.3;
   ctx.setLineDash([3, 4]);
 
@@ -595,7 +689,7 @@ function drawReadyTutorial() {
   const targetXOffset = player.jumpX * tEnd * 1.35;
   const targetYOffset = (player.jumpY * tEnd) + (0.5 * player.gravity * tEnd * tEnd);
 
-  ctx.fillStyle = "#8a8a8e";
+  setFill("#8a8a8e");
   
   ctx.save();
   ctx.translate(px - targetXOffset, py + targetYOffset);
@@ -611,7 +705,7 @@ function drawReadyTutorial() {
 
   const tapY = py + 48;
 
-  ctx.fillStyle = "#e04848";
+  setFill("#e04848");
   ctx.beginPath();
   ctx.moveTo(px - 44, tapY - 1);
   ctx.lineTo(px - 32, tapY - 9);
@@ -619,12 +713,12 @@ function drawReadyTutorial() {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = "#555555";
-  ctx.font = "300 24px -apple-system, sans-serif";
-  ctx.textAlign = "center";
+  setFill("#555555");
+  setFont("300 24px -apple-system, sans-serif");
+  setAlign("center");
   ctx.fillText("TAP", px, tapY + 6);
 
-  ctx.fillStyle = "#e04848";
+  setFill("#e04848");
   ctx.beginPath();
   ctx.moveTo(px + 44, tapY - 1);
   ctx.lineTo(px + 32, tapY - 9);
@@ -633,179 +727,107 @@ function drawReadyTutorial() {
   ctx.fill();
 }
 
-function drawAngelWings(cx, cy, scale, color = "#ffa502") {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(scale, scale);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6;
-
-  ctx.beginPath();
-  ctx.ellipse(0, -10, 6.5, 2.3, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(-1, 0);
-  ctx.bezierCurveTo(-6, -7, -13, -9, -15, -4);
-  ctx.bezierCurveTo(-14, 0, -10, 2, -13, 5);
-  ctx.bezierCurveTo(-10, 6, -7, 6, -9, 9);
-  ctx.bezierCurveTo(-6, 9, -4, 7, -1, 3);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(1, 0);
-  ctx.bezierCurveTo(6, -7, 13, -9, 15, -4);
-  ctx.bezierCurveTo(14, 0, 10, 2, 13, 5);
-  ctx.bezierCurveTo(10, 6, 7, 6, 9, 9);
-  ctx.bezierCurveTo(6, 9, 4, 7, 1, 3);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(0, 2, 2.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
 function drawHUD() {
-  ctx.strokeStyle = "#888888";
+  setStroke("#888888");
   ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.arc(PAUSE_BTN_X, PAUSE_BTN_Y, PAUSE_BTN_R, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = "#888888";
+  setFill("#888888");
   ctx.fillRect(PAUSE_BTN_X - 3, PAUSE_BTN_Y - 5.5, 1.8, 11);
   ctx.fillRect(PAUSE_BTN_X + 1.2, PAUSE_BTN_Y - 5.5, 1.8, 11);
 
-  ctx.fillStyle = "#222222";
-  ctx.font = "200 36px -apple-system, BlinkMacSystemFont, sans-serif";
-  ctx.textAlign = "right";
+  setFill("#222222");
+  setFont("200 36px -apple-system, BlinkMacSystemFont, sans-serif");
+  setAlign("right");
   ctx.fillText(score, V_WIDTH - 20, 38);
 
   if (deathPreventionEnabled) {
-    const wingColor = shieldStacks > 0 ? "#ffa502" : "#a4b0be";
-    drawAngelWings(24, V_HEIGHT - 22, 0.95, wingColor);
+    const wingImg = shieldStacks > 0 ? CACHE.wingsGold : CACHE.wingsGray;
+    ctx.drawImage(wingImg, 8, V_HEIGHT - 36);
 
-    ctx.fillStyle = shieldStacks > 0 ? "#2f3542" : "#888888";
-    ctx.font = "bold 13px -apple-system, sans-serif";
-    ctx.textAlign = "left";
+    setFill(shieldStacks > 0 ? "#2f3542" : "#888888");
+    setFont("bold 13px -apple-system, sans-serif");
+    setAlign("left");
     ctx.fillText(`${shieldStacks}/2`, 44, V_HEIGHT - 17);
   }
 }
 
 function drawPauseMenu() {
-  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  setFill("rgba(255, 255, 255, 0.4)");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
   const btnX = V_WIDTH / 2 - 60;
   const btnW = 120;
   const btnH = 42;
 
-  ctx.fillStyle = "#5c7cfa";
+  setFill("#5c7cfa");
   drawRoundRect(btnX, V_HEIGHT / 2 - 45, btnW, btnH, 21, true);
-  
-  ctx.fillStyle = "#ffffff";
-  drawHomeIcon(V_WIDTH / 2, V_HEIGHT / 2 - 24);
+  ctx.drawImage(CACHE.homeWhite, V_WIDTH / 2 - 12, V_HEIGHT / 2 - 36);
 
-  ctx.fillStyle = "#55aa55";
+  setFill("#55aa55");
   drawRoundRect(btnX, V_HEIGHT / 2 + 15, btnW, btnH, 21, true);
-  ctx.fillStyle = "#ffffff";
-  drawPlayIcon(V_WIDTH / 2 + 2, V_HEIGHT / 2 + 36, 14);
-}
-
-function drawHomeIcon(hx, hy) {
-  ctx.beginPath();
-  ctx.moveTo(hx, hy - 9);
-  ctx.lineTo(hx - 10, hy);
-  ctx.lineTo(hx - 7, hy);
-  ctx.lineTo(hx - 7, hy + 8);
-  ctx.lineTo(hx + 7, hy + 8);
-  ctx.lineTo(hx + 7, hy);
-  ctx.lineTo(hx + 10, hy);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawGearIcon(cx, cy, r, color = "#888888", innerColor = "#ffffff") {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  const teeth = 8;
-  for (let i = 0; i < teeth * 2; i++) {
-    const angle = (i * Math.PI) / teeth;
-    const rad = i % 2 === 0 ? r : r - 3.5;
-    const x = cx + Math.cos(angle) * rad;
-    const y = cy + Math.sin(angle) * rad;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = innerColor;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 10, V_HEIGHT / 2 + 24);
 }
 
 function drawMenu() {
   const lang = I18N[currentLang];
 
-  ctx.fillStyle = "#222222";
-  ctx.textAlign = "center";
+  setFill("#222222");
+  setAlign("center");
 
-  ctx.font = "300 38px sans-serif";
+  setFont("300 38px sans-serif");
   ctx.fillText("FRUSTRATING", V_WIDTH / 2, V_HEIGHT / 2 - 125);
   ctx.fillText("BRICK", V_WIDTH / 2, V_HEIGHT / 2 - 85);
 
   ctx.save();
   ctx.translate(V_WIDTH / 2, V_HEIGHT / 2 - 40);
   ctx.rotate(Math.PI / 4);
-  ctx.fillStyle = "#111";
+  setFill("#111");
   ctx.fillRect(-10, -10, 20, 20);
   ctx.restore();
 
-  drawGearIcon(325, 32, 14, "#888888", "#ffffff");
+  // Önbellekten Dişli Çark
+  ctx.drawImage(CACHE.gearGray, 309, 16);
 
-  ctx.fillStyle = "#c0392b";
+  // RATE
+  setFill("#c0392b");
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 15, 120, 36, 18, true);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 14px sans-serif";
+  setFill("#ffffff");
+  setFont("bold 14px sans-serif");
   ctx.fillText(lang.rate, V_WIDTH / 2, V_HEIGHT / 2 + 38);
 
-  ctx.fillStyle = "#55aa55";
+  // PLAY
+  setFill("#55aa55");
   drawRoundRect(V_WIDTH / 2 - 80, V_HEIGHT / 2 + 70, 75, 42, 21, true);
-  ctx.fillStyle = "#ffffff";
-  drawPlayIcon(V_WIDTH / 2 - 42, V_HEIGHT / 2 + 91, 14);
+  ctx.drawImage(CACHE.playWhite, V_WIDTH / 2 - 54, V_HEIGHT / 2 + 79);
 
-  ctx.fillStyle = "#4a69bd";
+  // LEADERBOARD
+  setFill("#4a69bd");
   drawRoundRect(V_WIDTH / 2 + 5, V_HEIGHT / 2 + 70, 75, 42, 21, true);
-  ctx.fillStyle = "#ffffff";
+  setFill("#ffffff");
   ctx.fillRect(V_WIDTH / 2 + 25, V_HEIGHT / 2 + 91, 6, 12);
   ctx.fillRect(V_WIDTH / 2 + 35, V_HEIGHT / 2 + 84, 6, 19);
   ctx.fillRect(V_WIDTH / 2 + 45, V_HEIGHT / 2 + 88, 6, 15);
 
-  ctx.fillStyle = "#474787";
+  // AYARLAR
+  setFill("#474787");
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 124, 120, 36, 18, true);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 13px sans-serif";
+  setFill("#ffffff");
+  setFont("bold 13px sans-serif");
   ctx.fillText(lang.settings, V_WIDTH / 2, V_HEIGHT / 2 + 147);
 
-  ctx.fillStyle = "#999999";
-  ctx.font = "12px sans-serif";
+  // Alt Bilgi
+  setFill("#999999");
+  setFont("12px sans-serif");
   ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOn : ""), V_WIDTH / 2, V_HEIGHT - 65);
   ctx.fillText("© 2026 AHMETYLC", V_WIDTH / 2, V_HEIGHT - 35);
 }
 
 function drawSettings() {
   const lang = I18N[currentLang];
-  ctx.fillStyle = "#ffffff";
+  setFill("#ffffff");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
   const langBtnY = 65;
@@ -814,36 +836,35 @@ function drawSettings() {
   const trBtnX = V_WIDTH / 2 + 10;
   const langBtnW = 100;
 
+  setFont("bold 13px sans-serif");
+  setAlign("center");
+
   if (currentLang === "en") {
-    ctx.fillStyle = "#2f3542";
+    setFill("#2f3542");
     drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
-    ctx.fillStyle = "#ffffff";
+    setFill("#ffffff");
   } else {
-    ctx.fillStyle = "#f5f5f7";
+    setFill("#f5f5f7");
     drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
-    ctx.strokeStyle = "#e0e0e0";
+    setStroke("#e0e0e0");
     ctx.lineWidth = 1.3;
     drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
-    ctx.fillStyle = "#666666";
+    setFill("#666666");
   }
-  ctx.font = "bold 13px sans-serif";
-  ctx.textAlign = "center";
   ctx.fillText("ENGLISH", enBtnX + langBtnW / 2, langBtnY + 22);
 
   if (currentLang === "tr") {
-    ctx.fillStyle = "#2f3542";
+    setFill("#2f3542");
     drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
-    ctx.fillStyle = "#ffffff";
+    setFill("#ffffff");
   } else {
-    ctx.fillStyle = "#f5f5f7";
+    setFill("#f5f5f7");
     drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
-    ctx.strokeStyle = "#e0e0e0";
+    setStroke("#e0e0e0");
     ctx.lineWidth = 1.3;
     drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, false, true);
-    ctx.fillStyle = "#666666";
+    setFill("#666666");
   }
-  ctx.font = "bold 13px sans-serif";
-  ctx.textAlign = "center";
   ctx.fillText("TÜRKÇE", trBtnX + langBtnW / 2, langBtnY + 22);
 
   const btnX = V_WIDTH / 2 - 120;
@@ -856,24 +877,22 @@ function drawSettings() {
     const diff = DIFFICULTY_CONFIG[i];
 
     if (isSelected) {
-      ctx.fillStyle = diff.color;
+      setFill(diff.color);
       drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
 
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 14px sans-serif";
-      ctx.textAlign = "center";
+      setFill("#ffffff");
+      setFont("bold 14px sans-serif");
       ctx.fillText(getDiffName(i) + "  ✓", V_WIDTH / 2, btnY + 23);
     } else {
-      ctx.fillStyle = "#f5f5f7";
+      setFill("#f5f5f7");
       drawRoundRect(btnX, btnY, btnW, btnH, 18, true, false);
 
-      ctx.strokeStyle = "#e0e0e0";
+      setStroke("#e0e0e0");
       ctx.lineWidth = 1.3;
       drawRoundRect(btnX, btnY, btnW, btnH, 18, false, true);
 
-      ctx.fillStyle = "#444444";
-      ctx.font = "13px sans-serif";
-      ctx.textAlign = "center";
+      setFill("#444444");
+      setFont("13px sans-serif");
       ctx.fillText(getDiffName(i), V_WIDTH / 2, btnY + 23);
     }
   }
@@ -881,38 +900,38 @@ function drawSettings() {
   const toggleY = 370;
   const toggleH = 46;
 
-  ctx.fillStyle = deathPreventionEnabled ? "#fbf8ee" : "#f5f5f7";
+  setFill(deathPreventionEnabled ? "#fbf8ee" : "#f5f5f7");
   drawRoundRect(btnX, toggleY, btnW, toggleH, 20, true, false);
 
-  ctx.strokeStyle = deathPreventionEnabled ? "#f1c40f" : "#e0e0e0";
+  setStroke(deathPreventionEnabled ? "#f1c40f" : "#e0e0e0");
   ctx.lineWidth = 1.5;
   drawRoundRect(btnX, toggleY, btnW, toggleH, 20, false, true);
 
-  drawAngelWings(btnX + 26, toggleY + 23, 0.9, deathPreventionEnabled ? "#ffa502" : "#a4b0be");
+  ctx.drawImage(deathPreventionEnabled ? CACHE.wingsGold : CACHE.wingsGray, btnX + 8, toggleY + 9);
 
-  ctx.fillStyle = "#333333";
-  ctx.font = "bold 14px sans-serif";
-  ctx.textAlign = "left";
+  setFill("#333333");
+  setFont("bold 14px sans-serif");
+  setAlign("left");
   ctx.fillText(lang.deathPrev, btnX + 48, toggleY + 28);
 
   const chkX = btnX + btnW - 32;
   const chkY = toggleY + 13;
-  ctx.fillStyle = deathPreventionEnabled ? "#2ed573" : "#dcdde1";
+  setFill(deathPreventionEnabled ? "#2ed573" : "#dcdde1");
   drawRoundRect(chkX, chkY, 20, 20, 6, true);
   if (deathPreventionEnabled) {
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 13px sans-serif";
-    ctx.textAlign = "center";
+    setFill("#ffffff");
+    setFont("bold 13px sans-serif");
+    setAlign("center");
     ctx.fillText("✓", chkX + 10, chkY + 15);
   }
 
   const backBtnX = V_WIDTH / 2 - 60;
   const backBtnY = 445;
-  ctx.fillStyle = "#2c2c54";
+  setFill("#2c2c54");
   drawRoundRect(backBtnX, backBtnY, 120, 38, 19, true, false);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 14px sans-serif";
-  ctx.textAlign = "center";
+  setFill("#ffffff");
+  setFont("bold 14px sans-serif");
+  setAlign("center");
   ctx.fillText(lang.back, V_WIDTH / 2, backBtnY + 24);
 }
 
@@ -920,15 +939,15 @@ function drawRewardBadge(centerX, centerY, scoreVal) {
   const tier = Math.floor(scoreVal / 10);
 
   if (tier === 0) {
-    ctx.strokeStyle = "#e2e2e2";
+    setStroke("#e2e2e2");
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = "#bbbbbb";
-    ctx.font = "12px sans-serif";
-    ctx.textAlign = "center";
+    setFill("#bbbbbb");
+    setFont("12px sans-serif");
+    setAlign("center");
     ctx.fillText("?", centerX, centerY + 4);
     return;
   }
@@ -938,7 +957,7 @@ function drawRewardBadge(centerX, centerY, scoreVal) {
   const outerR = 23;
   const innerR = 18;
 
-  ctx.fillStyle = badgeColor;
+  setFill(badgeColor);
   ctx.beginPath();
   for (let i = 0; i < points * 2; i++) {
     const r = i % 2 === 0 ? outerR : innerR;
@@ -951,75 +970,64 @@ function drawRewardBadge(centerX, centerY, scoreVal) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = "#ffffff";
+  setFill("#ffffff");
   ctx.beginPath();
   ctx.arc(centerX, centerY, 11, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = badgeColor;
-  ctx.font = "bold 11px sans-serif";
-  ctx.textAlign = "center";
+  setFill(badgeColor);
+  setFont("bold 11px sans-serif");
+  setAlign("center");
   ctx.fillText(tier * 10, centerX, centerY + 4);
 }
 
 function drawGameOver() {
   const lang = I18N[currentLang];
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+  setFill("rgba(255, 255, 255, 0.96)");
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
-  ctx.fillStyle = "#222";
-  ctx.font = "300 36px sans-serif";
-  ctx.textAlign = "center";
+  setFill("#222");
+  setFont("300 36px sans-serif");
+  setAlign("center");
   ctx.fillText("GAME OVER", V_WIDTH / 2, 170);
 
-  ctx.strokeStyle = "#d8d8d8";
+  setStroke("#d8d8d8");
   ctx.lineWidth = 1;
   drawRoundRect(40, 210, V_WIDTH - 80, 160, 20, false, true);
 
-  ctx.font = "16px sans-serif";
-  ctx.fillStyle = "#777";
+  setFont("16px sans-serif");
+  setFill("#777");
   ctx.fillText(lang.score, 90, 245);
   ctx.fillText(lang.best, 90, 305);
   ctx.fillText(lang.reward, V_WIDTH - 90, 245);
 
-  ctx.font = "300 28px sans-serif";
-  ctx.fillStyle = "#111";
+  setFont("300 28px sans-serif");
+  setFill("#111");
   ctx.fillText(score, 90, 278);
   ctx.fillText(bestScore, 90, 340);
 
   drawRewardBadge(V_WIDTH - 90, 300, score);
 
   // 1. Home Butonu
-  ctx.fillStyle = "#5c7cfa";
+  setFill("#5c7cfa");
   drawRoundRect(45, 400, 70, 48, 24, true);
-  ctx.fillStyle = "#ffffff";
-  drawHomeIcon(80, 424);
+  ctx.drawImage(CACHE.homeWhite, 68, 412);
 
   // 2. Play Butonu
-  ctx.fillStyle = "#55aa55";
+  setFill("#55aa55");
   drawRoundRect(130, 400, 100, 48, 24, true);
-  ctx.fillStyle = "#ffffff";
-  drawPlayIcon(182, 424, 16);
+  ctx.drawImage(CACHE.playWhiteLg, 166, 410);
 
   // 3. Settings Butonu
-  ctx.fillStyle = "#474787";
+  setFill("#474787");
   drawRoundRect(245, 400, 70, 48, 24, true);
-  drawGearIcon(280, 424, 12, "#ffffff", "#474787");
+  ctx.drawImage(CACHE.gearWhite, 264, 408);
 
-  ctx.fillStyle = "#888888";
-  ctx.font = "13px sans-serif";
-  ctx.textAlign = "center";
+  setFill("#888888");
+  setFont("13px sans-serif");
+  setAlign("center");
   ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOnShort : ""), V_WIDTH / 2, 478);
-}
-
-function drawPlayIcon(x, y, size) {
-  ctx.beginPath();
-  ctx.moveTo(x - size / 2, y - size / 2);
-  ctx.lineTo(x + size / 2, y);
-  ctx.lineTo(x - size / 2, y + size / 2);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
@@ -1034,39 +1042,26 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
-const FIXED_STEP = 1000 / 60;
-let accumulator = 0;
 let lastFrameTime = performance.now();
-const MAX_FRAME_TIME = 34;
-const MAX_PHYSICS_STEPS = 2;
 
 function gameLoop(currentTimestamp) {
   if (!currentTimestamp) currentTimestamp = performance.now();
   let frameDuration = currentTimestamp - lastFrameTime;
   lastFrameTime = currentTimestamp;
 
-  if (frameDuration > MAX_FRAME_TIME) frameDuration = MAX_FRAME_TIME;
+  if (frameDuration > 60) frameDuration = 60;
+  if (frameDuration < 1) frameDuration = 16.6667;
 
-  accumulator += frameDuration;
+  // 60Hz'de dt = 1.0, 120Hz'de dt = 0.5 (Tüm ekranlarda mükemmel akıcılık)
+  let dt = frameDuration / 16.6667;
 
-  let steps = 0;
-  while (accumulator >= FIXED_STEP && steps < MAX_PHYSICS_STEPS) {
-    fixedPhysicsUpdate();
-    accumulator -= FIXED_STEP;
-    steps++;
-  }
-
-  if (accumulator >= FIXED_STEP) {
-    accumulator = 0;
-  }
-
+  update(dt);
   draw();
   requestAnimationFrame(gameLoop);
 }
 
 document.addEventListener("visibilitychange", () => {
   lastFrameTime = performance.now();
-  accumulator = 0;
 });
 
 // Canvas İçi Tıklama / Dokunma Dönüştürücüsü

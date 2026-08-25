@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Frustrating Brick</title>
   <style>
     * {
@@ -31,6 +31,8 @@
       background: #ffffff;
       box-shadow: 0 15px 40px rgba(0,0,0,0.6);
       overflow: hidden;
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
     }
     canvas {
       display: block;
@@ -77,6 +79,7 @@ const REWARD_COLORS = [
   "#2f3542"
 ];
 
+// Dil Sözlüğü (Varsayılan: İngilizce)
 const I18N = {
   en: {
     rate: "RATE",
@@ -108,6 +111,7 @@ const I18N = {
 
 let currentLang = localStorage.getItem("frustrating_brick_lang") || "en";
 
+// 5 Kademeli Zorluk Seviyesi
 const DIFFICULTY_CONFIG = [
   {
     id: 0,
@@ -176,13 +180,14 @@ let score = 0;
 let bestScore = parseInt(localStorage.getItem("frustrating_brick_best") || "0");
 let cameraY = 0;
 
+// Ölüm Engelleme
 let shieldStacks = 0;
 const MAX_SHIELD_STACKS = 2;
 let lastEarnedShieldMilestone = 0;
-let invulnerableFrames = 0;
-let shieldBounceEffect = 0;
+let invulnerableTicks = 0;
+let shieldBounceTicks = 0;
 
-// 60 FPS Standardına Göre Kalibre Edilmiş Fizik
+// Karakter Parametreleri (60 FPS Sabit Hıza Göre Tam Optimize Edilmiş)
 const player = {
   x: V_WIDTH / 2,
   y: V_HEIGHT / 2 + 25,
@@ -210,8 +215,6 @@ const SQUARE_SIZE = 24;
 const PAUSE_BTN_X = 26;
 const PAUSE_BTN_Y = 26;
 const PAUSE_BTN_R = 13;
-
-let lastTimestamp = performance.now();
 
 function getTierColor(tierIndex) {
   const colorIdx = Math.floor(tierIndex / 4) % PALETTES.length;
@@ -283,8 +286,8 @@ function initReadySession() {
   cameraY = 0;
   shieldStacks = 0;
   lastEarnedShieldMilestone = 0;
-  invulnerableFrames = 0;
-  shieldBounceEffect = 0;
+  invulnerableTicks = 0;
+  shieldBounceTicks = 0;
   player.reset();
   obstacles = [];
 
@@ -298,8 +301,8 @@ function initReadySession() {
 function triggerDeathOrShield() {
   if (deathPreventionEnabled && shieldStacks > 0) {
     shieldStacks--;
-    invulnerableFrames = 48;
-    shieldBounceEffect = 22;
+    invulnerableTicks = 48;
+    shieldBounceTicks = 22;
 
     player.vy = -10.8;
     player.vx = (player.x < V_WIDTH / 2 ? 2.1 : -2.1);
@@ -466,12 +469,13 @@ function checkCollision(px, py, size, rx, ry, rw, rh) {
   return false;
 }
 
-function update(dt) {
+// Deterministik Sabit Fizik Güncellemesi (Her saniye tam 60 kez çalışır)
+function fixedPhysicsUpdate() {
   if (currentState !== STATE.PLAYING) return;
 
-  player.vy += player.gravity * dt;
-  player.y += player.vy * dt;
-  player.x += player.vx * dt;
+  player.vy += player.gravity;
+  player.y += player.vy;
+  player.x += player.vx;
 
   const cornerBound = (player.size * Math.SQRT2) / 2;
   let isTouchingWall = false;
@@ -495,8 +499,8 @@ function update(dt) {
     cameraY = targetCamY;
   }
 
-  if (invulnerableFrames > 0) invulnerableFrames = Math.max(0, invulnerableFrames - dt);
-  if (shieldBounceEffect > 0) shieldBounceEffect = Math.max(0, shieldBounceEffect - dt);
+  if (invulnerableTicks > 0) invulnerableTicks--;
+  if (shieldBounceTicks > 0) shieldBounceTicks--;
 
   if (player.y + cameraY > V_HEIGHT + 40) {
     if (!triggerDeathOrShield()) return;
@@ -525,7 +529,7 @@ function update(dt) {
       }
     }
 
-    if (invulnerableFrames <= 0) {
+    if (invulnerableTicks === 0) {
       for (const r of obs.rects) {
         if (checkCollision(player.x, player.y, player.size, r.x, r.y, r.w, r.h)) {
           if (!triggerDeathOrShield()) return;
@@ -557,19 +561,19 @@ function draw() {
       }
     }
 
-    if (shieldBounceEffect > 0) {
-      ctx.strokeStyle = `rgba(255, 175, 20, ${shieldBounceEffect / 22})`;
+    if (shieldBounceTicks > 0) {
+      ctx.strokeStyle = `rgba(255, 175, 20, ${shieldBounceTicks / 22})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(player.x, player.y, (22 - shieldBounceEffect) * 2.2, 0, Math.PI * 2);
+      ctx.arc(player.x, player.y, (22 - shieldBounceTicks) * 2.2, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    if (invulnerableFrames <= 0 || Math.floor(invulnerableFrames / 4) % 2 === 0) {
+    if (invulnerableTicks === 0 || Math.floor(invulnerableTicks / 4) % 2 === 0) {
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = (invulnerableFrames > 0) ? "#ffa502" : "#0c0c0c";
+      ctx.fillStyle = (invulnerableTicks > 0) ? "#ffa502" : "#0c0c0c";
       ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
       ctx.restore();
     }
@@ -1059,15 +1063,27 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
+// Fixed Timestep Engine (Cihaz kare hızından bağımsız gerçek zaman kilitli döngü)
+const FIXED_STEP = 1000 / 60; // 16.666ms (Tam 60 ticks/sn)
+let accumulator = 0;
+let lastFrameTime = performance.now();
+
 function gameLoop(currentTimestamp) {
-  let elapsed = currentTimestamp - lastTimestamp;
-  lastTimestamp = currentTimestamp;
+  if (!currentTimestamp) currentTimestamp = performance.now();
+  let frameDuration = currentTimestamp - lastFrameTime;
+  lastFrameTime = currentTimestamp;
 
-  let dt = elapsed / 16.667;
-  if (dt > 2.0) dt = 2.0;
-  if (isNaN(dt) || dt <= 0) dt = 1;
+  // Aşırı takılma durumlarında döngü kilitlenmesini engelle
+  if (frameDuration > 100) frameDuration = 100;
 
-  update(dt);
+  accumulator += frameDuration;
+
+  // Gerçek geçen süre kadar fizik adımı işlet (Telefonda ve PC'de 1 saniye = tam 60 adım)
+  while (accumulator >= FIXED_STEP) {
+    fixedPhysicsUpdate();
+    accumulator -= FIXED_STEP;
+  }
+
   draw();
   requestAnimationFrame(gameLoop);
 }

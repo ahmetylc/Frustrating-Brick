@@ -65,19 +65,18 @@ const PALETTES = [
 ];
 
 const REWARD_COLORS = [
-  "#deb887", // 10-19: Bronz / Bej
-  "#70a1ff", // 20-29: Safir Mavi
-  "#8854d0", // 30-39: Ametist Mor
-  "#ff4757", // 40-49: Mercan Kırmızı
-  "#ffa502", // 50-59: Kehribar Turuncu
-  "#2ed573", // 60-69: Zümrüt Yeşil
-  "#00d2d3", // 70-79: Elmas Turkuaz
-  "#e056fd", // 80-89: Neon Pembe
-  "#f1c40f", // 90-99: Parlak Altın
-  "#2f3542"  // 100+: Obsidyen Siyahı
+  "#deb887",
+  "#70a1ff",
+  "#8854d0",
+  "#ff4757",
+  "#ffa502",
+  "#2ed573",
+  "#00d2d3",
+  "#e056fd",
+  "#f1c40f",
+  "#2f3542"
 ];
 
-// Dil Sözlüğü (Varsayılan: İngilizce)
 const I18N = {
   en: {
     rate: "RATE",
@@ -109,11 +108,10 @@ const I18N = {
 
 let currentLang = localStorage.getItem("frustrating_brick_lang") || "en";
 
-// 5 Kademeli Zorluk Seviyesi
 const DIFFICULTY_CONFIG = [
   {
     id: 0,
-    color: "#2ed573", // Yeşil
+    color: "#2ed573",
     lowerRange: [22, 42],
     upperRange: [22, 44],
     closeChance: 0.85,
@@ -122,7 +120,7 @@ const DIFFICULTY_CONFIG = [
   },
   {
     id: 1,
-    color: "#3742fa", // Mavi
+    color: "#3742fa",
     lowerRange: [30, 52],
     upperRange: [30, 54],
     closeChance: 0.65,
@@ -131,7 +129,7 @@ const DIFFICULTY_CONFIG = [
   },
   {
     id: 2,
-    color: "#ffa502", // Turuncu
+    color: "#ffa502",
     lowerRange: [40, 66],
     upperRange: [40, 67],
     closeChance: 0.40,
@@ -140,7 +138,7 @@ const DIFFICULTY_CONFIG = [
   },
   {
     id: 3,
-    color: "#ff4757", // Kırmızı
+    color: "#ff4757",
     lowerRange: [48, 74],
     upperRange: [48, 74],
     closeChance: 0.10,
@@ -149,7 +147,7 @@ const DIFFICULTY_CONFIG = [
   },
   {
     id: 4,
-    color: "#2f3542", // Obsidyen Koyu Grafit
+    color: "#2f3542",
     lowerRange: [58, 86],
     upperRange: [58, 86],
     closeChance: 0.04,
@@ -178,24 +176,23 @@ let score = 0;
 let bestScore = parseInt(localStorage.getItem("frustrating_brick_best") || "0");
 let cameraY = 0;
 
-// Ölüm Engelleme
 let shieldStacks = 0;
 const MAX_SHIELD_STACKS = 2;
 let lastEarnedShieldMilestone = 0;
 let invulnerableFrames = 0;
 let shieldBounceEffect = 0;
 
-// Karakter Parametreleri
+// 60 FPS Standardına Göre Kalibre Edilmiş Fizik
 const player = {
   x: V_WIDTH / 2,
   y: V_HEIGHT / 2 + 25,
   vx: 0,
   vy: 0,
   size: 19,
-  gravity: 0.0670,
-  jumpY: -4.28,
-  jumpX: 0.52,
-  wallSlideSpeed: 0.48,
+  gravity: 0.324,
+  jumpY: -9.41,
+  jumpX: 1.14,
+  wallSlideSpeed: 1.05,
   reset() {
     this.x = V_WIDTH / 2;
     this.y = V_HEIGHT / 2 + 25;
@@ -204,17 +201,17 @@ const player = {
   }
 };
 
-// Engel Parametreleri
 let obstacles = [];
 const TIER_SPACING = 355;
 const GAP_WIDTH = 120;
 const BAR_HEIGHT = 35;
 const SQUARE_SIZE = 24;
 
-// Pause Butonu
 const PAUSE_BTN_X = 26;
 const PAUSE_BTN_Y = 26;
 const PAUSE_BTN_R = 13;
+
+let lastTimestamp = performance.now();
 
 function getTierColor(tierIndex) {
   const colorIdx = Math.floor(tierIndex / 4) % PALETTES.length;
@@ -233,13 +230,11 @@ function createObstacleTier(y, tierScore) {
   const gapLeft = gapCenterX - (GAP_WIDTH / 2);
   const gapRight = gapCenterX + (GAP_WIDTH / 2);
 
-  // 1. Yatay Barlar
   const rects = [
     { x: 0, y: y, w: gapLeft, h: BAR_HEIGHT },
     { x: gapRight, y: y, w: V_WIDTH - gapRight, h: BAR_HEIGHT }
   ];
 
-  // 2. Slalom Kare Bloklar
   const diff = DIFFICULTY_CONFIG[currentDifficulty];
   const inset = diff.hInset;
 
@@ -266,7 +261,6 @@ function createObstacleTier(y, tierScore) {
     upperOffset = diff.upperRange[0] + Math.random() * (diff.upperRange[1] - diff.upperRange[0]);
   }
 
-  // Alt Blok
   rects.push({
     x: lowerSquareX,
     y: y + BAR_HEIGHT + lowerOffset,
@@ -274,7 +268,6 @@ function createObstacleTier(y, tierScore) {
     h: SQUARE_SIZE
   });
 
-  // Üst Blok
   rects.push({
     x: upperSquareX,
     y: y - SQUARE_SIZE - upperOffset,
@@ -308,8 +301,8 @@ function triggerDeathOrShield() {
     invulnerableFrames = 48;
     shieldBounceEffect = 22;
 
-    player.vy = -4.9;
-    player.vx = (player.x < V_WIDTH / 2 ? 0.95 : -0.95);
+    player.vy = -10.8;
+    player.vx = (player.x < V_WIDTH / 2 ? 2.1 : -2.1);
 
     if (player.y + cameraY > V_HEIGHT) {
       player.y = (V_HEIGHT * 0.72) - cameraY;
@@ -348,7 +341,6 @@ function handleInput(direction, clickX, clickY) {
   }
 
   if (currentState === STATE.SETTINGS) {
-    // Dil Seçimi Butonları (EN / TR)
     const langBtnY = 65;
     const langBtnH = 34;
     const enBtnX = V_WIDTH / 2 - 110;
@@ -368,7 +360,6 @@ function handleInput(direction, clickX, clickY) {
       }
     }
 
-    // 5 Zorluk Butonu
     const btnX = V_WIDTH / 2 - 120;
     const btnW = 240;
     const btnH = 36;
@@ -382,7 +373,6 @@ function handleInput(direction, clickX, clickY) {
       }
     }
 
-    // Ölüm Engelleme Toggle
     const toggleY = 370;
     const toggleH = 46;
     if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + toggleH) {
@@ -391,7 +381,6 @@ function handleInput(direction, clickX, clickY) {
       return;
     }
 
-    // Geri Butonu
     const backBtnX = V_WIDTH / 2 - 60;
     const backBtnY = 445;
     if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
@@ -423,20 +412,17 @@ function handleInput(direction, clickX, clickY) {
     const btnY = 400;
     const btnH = 48;
 
-    // Ana Ekran
     if (clickX >= 45 && clickX <= 115 && clickY >= btnY && clickY <= btnY + btnH) {
       currentState = STATE.MENU;
       return;
     }
 
-    // Yeniden Başlat
     if (clickX >= 130 && clickX <= 230 && clickY >= btnY && clickY <= btnY + btnH) {
       initReadySession();
       currentState = STATE.READY;
       return;
     }
 
-    // Zorluk Ayarları
     if (clickX >= 245 && clickX <= 315 && clickY >= btnY && clickY <= btnY + btnH) {
       settingsReturnState = STATE.GAMEOVER;
       currentState = STATE.SETTINGS;
@@ -480,12 +466,12 @@ function checkCollision(px, py, size, rx, ry, rw, rh) {
   return false;
 }
 
-function update() {
+function update(dt) {
   if (currentState !== STATE.PLAYING) return;
 
-  player.vy += player.gravity;
-  player.y += player.vy;
-  player.x += player.vx;
+  player.vy += player.gravity * dt;
+  player.y += player.vy * dt;
+  player.x += player.vx * dt;
 
   const cornerBound = (player.size * Math.SQRT2) / 2;
   let isTouchingWall = false;
@@ -509,8 +495,8 @@ function update() {
     cameraY = targetCamY;
   }
 
-  if (invulnerableFrames > 0) invulnerableFrames--;
-  if (shieldBounceEffect > 0) shieldBounceEffect--;
+  if (invulnerableFrames > 0) invulnerableFrames = Math.max(0, invulnerableFrames - dt);
+  if (shieldBounceEffect > 0) shieldBounceEffect = Math.max(0, shieldBounceEffect - dt);
 
   if (player.y + cameraY > V_HEIGHT + 40) {
     if (!triggerDeathOrShield()) return;
@@ -539,7 +525,7 @@ function update() {
       }
     }
 
-    if (invulnerableFrames === 0) {
+    if (invulnerableFrames <= 0) {
       for (const r of obs.rects) {
         if (checkCollision(player.x, player.y, player.size, r.x, r.y, r.w, r.h)) {
           if (!triggerDeathOrShield()) return;
@@ -579,7 +565,7 @@ function draw() {
       ctx.stroke();
     }
 
-    if (invulnerableFrames === 0 || Math.floor(invulnerableFrames / 4) % 2 === 0) {
+    if (invulnerableFrames <= 0 || Math.floor(invulnerableFrames / 4) % 2 === 0) {
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(Math.PI / 4);
@@ -610,8 +596,8 @@ function draw() {
 
 function drawParabolaPath(startX, startY, dir) {
   ctx.beginPath();
-  const totalFrames = 80;
-  for (let t = 0; t <= totalFrames; t += 2) {
+  const totalFrames = 36;
+  for (let t = 0; t <= totalFrames; t += 1) {
     const px = startX + (dir * player.jumpX * t * 1.35);
     const py = startY + (player.jumpY * t) + (0.5 * player.gravity * t * t);
     if (t === 0) ctx.moveTo(px, py);
@@ -633,7 +619,7 @@ function drawReadyTutorial() {
   drawParabolaPath(px, py, 1);
   ctx.restore();
 
-  const tEnd = 80;
+  const tEnd = 36;
   const targetXOffset = player.jumpX * tEnd * 1.35;
   const targetYOffset = (player.jumpY * tEnd) + (0.5 * player.gravity * tEnd * tEnd);
 
@@ -683,12 +669,10 @@ function drawAngelWings(cx, cy, scale, color = "#ffa502") {
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.6;
 
-  // Melek Halesi
   ctx.beginPath();
   ctx.ellipse(0, -10, 6.5, 2.3, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Sol Kanat
   ctx.beginPath();
   ctx.moveTo(-1, 0);
   ctx.bezierCurveTo(-6, -7, -13, -9, -15, -4);
@@ -698,7 +682,6 @@ function drawAngelWings(cx, cy, scale, color = "#ffa502") {
   ctx.closePath();
   ctx.fill();
 
-  // Sağ Kanat
   ctx.beginPath();
   ctx.moveTo(1, 0);
   ctx.bezierCurveTo(6, -7, 13, -9, 15, -4);
@@ -708,7 +691,6 @@ function drawAngelWings(cx, cy, scale, color = "#ffa502") {
   ctx.closePath();
   ctx.fill();
 
-  // Merkez Nokta
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(0, 2, 2.2, 0, Math.PI * 2);
@@ -752,14 +734,12 @@ function drawPauseMenu() {
   const btnW = 120;
   const btnH = 42;
 
-  // Home Butonu
   ctx.fillStyle = "#5c7cfa";
   drawRoundRect(btnX, V_HEIGHT / 2 - 45, btnW, btnH, 21, true);
   
   ctx.fillStyle = "#ffffff";
   drawHomeIcon(V_WIDTH / 2, V_HEIGHT / 2 - 24);
 
-  // Resume Butonu
   ctx.fillStyle = "#55aa55";
   drawRoundRect(btnX, V_HEIGHT / 2 + 15, btnW, btnH, 21, true);
   ctx.fillStyle = "#ffffff";
@@ -808,12 +788,10 @@ function drawMenu() {
   ctx.fillStyle = "#222222";
   ctx.textAlign = "center";
 
-  // Başlık (Büyütülmüş punto ve daha yukarı konumlandırılmış)
   ctx.font = "300 38px sans-serif";
   ctx.fillText("FRUSTRATING", V_WIDTH / 2, V_HEIGHT / 2 - 125);
   ctx.fillText("BRICK", V_WIDTH / 2, V_HEIGHT / 2 - 85);
 
-  // Karakteri temsil eden kare (Yazının hemen altında, ortada konumlandırıldı)
   ctx.save();
   ctx.translate(V_WIDTH / 2, V_HEIGHT / 2 - 40);
   ctx.rotate(Math.PI / 4);
@@ -821,23 +799,19 @@ function drawMenu() {
   ctx.fillRect(-10, -10, 20, 20);
   ctx.restore();
 
-  // Sağ Üst Ayarlar İkonu
   drawGearIcon(325, 32, 14, "#888888", "#ffffff");
 
-  // RATE / OYLA
   ctx.fillStyle = "#c0392b";
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 15, 120, 36, 18, true);
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 14px sans-serif";
   ctx.fillText(lang.rate, V_WIDTH / 2, V_HEIGHT / 2 + 38);
 
-  // PLAY
   ctx.fillStyle = "#55aa55";
   drawRoundRect(V_WIDTH / 2 - 80, V_HEIGHT / 2 + 70, 75, 42, 21, true);
   ctx.fillStyle = "#ffffff";
   drawPlayIcon(V_WIDTH / 2 - 42, V_HEIGHT / 2 + 91, 14);
 
-  // LEADERBOARD
   ctx.fillStyle = "#4a69bd";
   drawRoundRect(V_WIDTH / 2 + 5, V_HEIGHT / 2 + 70, 75, 42, 21, true);
   ctx.fillStyle = "#ffffff";
@@ -845,14 +819,12 @@ function drawMenu() {
   ctx.fillRect(V_WIDTH / 2 + 35, V_HEIGHT / 2 + 84, 6, 19);
   ctx.fillRect(V_WIDTH / 2 + 45, V_HEIGHT / 2 + 88, 6, 15);
 
-  // AYARLAR BUTONU
   ctx.fillStyle = "#474787";
   drawRoundRect(V_WIDTH / 2 - 60, V_HEIGHT / 2 + 124, 120, 36, 18, true);
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 13px sans-serif";
   ctx.fillText(lang.settings, V_WIDTH / 2, V_HEIGHT / 2 + 147);
 
-  // Aktif Zorluk Etiketi
   ctx.fillStyle = "#999999";
   ctx.font = "12px sans-serif";
   ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOn : ""), V_WIDTH / 2, V_HEIGHT - 65);
@@ -864,14 +836,12 @@ function drawSettings() {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
 
-  // Dil Seçim Butonları (EN / TR)
   const langBtnY = 65;
   const langBtnH = 34;
   const enBtnX = V_WIDTH / 2 - 110;
   const trBtnX = V_WIDTH / 2 + 10;
   const langBtnW = 100;
 
-  // English Butonu
   if (currentLang === "en") {
     ctx.fillStyle = "#2f3542";
     drawRoundRect(enBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
@@ -888,7 +858,6 @@ function drawSettings() {
   ctx.textAlign = "center";
   ctx.fillText("ENGLISH", enBtnX + langBtnW / 2, langBtnY + 22);
 
-  // Türkçe Butonu
   if (currentLang === "tr") {
     ctx.fillStyle = "#2f3542";
     drawRoundRect(trBtnX, langBtnY, langBtnW, langBtnH, 17, true, false);
@@ -905,7 +874,6 @@ function drawSettings() {
   ctx.textAlign = "center";
   ctx.fillText("TÜRKÇE", trBtnX + langBtnW / 2, langBtnY + 22);
 
-  // 5 Zorluk Seviyesi Butonları
   const btnX = V_WIDTH / 2 - 120;
   const btnW = 240;
   const btnH = 36;
@@ -938,7 +906,6 @@ function drawSettings() {
     }
   }
 
-  // Ölüm Engelleme Toggle Seçeneği
   const toggleY = 370;
   const toggleH = 46;
 
@@ -956,7 +923,6 @@ function drawSettings() {
   ctx.textAlign = "left";
   ctx.fillText(lang.deathPrev, btnX + 48, toggleY + 28);
 
-  // Checkbox
   const chkX = btnX + btnW - 32;
   const chkY = toggleY + 13;
   ctx.fillStyle = deathPreventionEnabled ? "#2ed573" : "#dcdde1";
@@ -968,7 +934,6 @@ function drawSettings() {
     ctx.fillText("✓", chkX + 10, chkY + 15);
   }
 
-  // Geri Butonu
   const backBtnX = V_WIDTH / 2 - 60;
   const backBtnY = 445;
   ctx.fillStyle = "#2c2c54";
@@ -1053,24 +1018,20 @@ function drawGameOver() {
 
   drawRewardBadge(V_WIDTH - 90, 300, score);
 
-  // Home
   ctx.fillStyle = "#5c7cfa";
   drawRoundRect(45, 400, 70, 48, 24, true);
   ctx.fillStyle = "#ffffff";
   drawHomeIcon(80, 424);
 
-  // Play
   ctx.fillStyle = "#55aa55";
   drawRoundRect(130, 400, 100, 48, 24, true);
   ctx.fillStyle = "#ffffff";
   drawPlayIcon(182, 424, 16);
 
-  // Settings
   ctx.fillStyle = "#474787";
   drawRoundRect(245, 400, 70, 48, 24, true);
   drawGearIcon(280, 424, 12, "#ffffff", "#474787");
 
-  // Aktif Zorluk Bilgisi
   ctx.fillStyle = "#888888";
   ctx.font = "13px sans-serif";
   ctx.textAlign = "center";
@@ -1098,8 +1059,15 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
-function gameLoop() {
-  update();
+function gameLoop(currentTimestamp) {
+  let elapsed = currentTimestamp - lastTimestamp;
+  lastTimestamp = currentTimestamp;
+
+  let dt = elapsed / 16.667;
+  if (dt > 2.0) dt = 2.0;
+  if (isNaN(dt) || dt <= 0) dt = 1;
+
+  update(dt);
   draw();
   requestAnimationFrame(gameLoop);
 }
@@ -1141,7 +1109,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-gameLoop();
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>

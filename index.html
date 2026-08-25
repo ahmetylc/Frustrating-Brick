@@ -32,21 +32,20 @@
     }
     #wrapper {
       position: relative;
-      width: 100%;
-      height: 100%;
-      max-width: 100vw;
-      max-height: 100dvh;
-      aspect-ratio: 360 / 628;
+      width: min(100vw, calc(100dvh * (360 / 628)));
+      height: min(100dvh, calc(100vw * (628 / 360)));
+      max-height: 94dvh;
+      max-width: calc(94dvh * (360 / 628));
       background: #ffffff;
+      box-shadow: 0 0 35px rgba(0,0,0,0.8);
       overflow: hidden;
-      will-change: transform;
       contain: strict;
     }
     canvas {
       display: block;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      touch-action: none;
     }
   </style>
 </head>
@@ -58,7 +57,7 @@
 
 <script>
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d", { alpha: false }); // Alpha kapatılarak GPU çizimi hızlandırıldı
+const ctx = canvas.getContext("2d", { alpha: false });
 
 const V_WIDTH = 360;
 const V_HEIGHT = 628;
@@ -282,25 +281,32 @@ function triggerDeathOrShield() {
 }
 
 function handleInput(direction, clickX, clickY) {
-  if (currentState === STATE.MENU) {
-    const playBtnX = V_WIDTH / 2 - 80;
-    const playBtnY = V_HEIGHT / 2 + 75;
-    if (clickX >= playBtnX && clickX <= playBtnX + 75 && clickY >= playBtnY && clickY <= playBtnY + 42) {
-      initReadySession();
-      currentState = STATE.READY;
+  // 1. OYUN İÇİNDE PAUSE BUTONU
+  if (currentState === STATE.PLAYING) {
+    if (clickX <= 60 && clickY <= 60) {
+      currentState = STATE.PAUSED;
       return;
     }
+  }
 
-    const distToSettings = Math.hypot(clickX - 325, clickY - 32);
-    if (distToSettings <= 20) {
+  // 2. ANA MENÜ
+  if (currentState === STATE.MENU) {
+    // Sağ Üst Ayarlar Dişli Çark
+    if (clickX >= 290 && clickY <= 65) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
       return;
     }
 
-    const setBtnX = V_WIDTH / 2 - 60;
-    const setBtnY = V_HEIGHT / 2 + 130;
-    if (clickX >= setBtnX && clickX <= setBtnX + 120 && clickY >= setBtnY && clickY <= setBtnY + 36) {
+    // PLAY Butonu
+    if (clickX >= 90 && clickX <= 180 && clickY >= 370 && clickY <= 430) {
+      initReadySession();
+      currentState = STATE.READY;
+      return;
+    }
+
+    // Alt Ayarlar Butonu
+    if (clickX >= 110 && clickX <= 250 && clickY >= 430 && clickY <= 480) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
       return;
@@ -308,26 +314,23 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
+  // 3. AYARLAR EKRANI
   if (currentState === STATE.SETTINGS) {
-    const langBtnY = 65;
-    const langBtnH = 34;
-    const enBtnX = V_WIDTH / 2 - 110;
-    const trBtnX = V_WIDTH / 2 + 10;
-    const langBtnW = 100;
-
-    if (clickY >= langBtnY && clickY <= langBtnY + langBtnH) {
-      if (clickX >= enBtnX && clickX <= enBtnX + langBtnW) {
+    // Dil Butonları
+    if (clickY >= 60 && clickY <= 105) {
+      if (clickX >= 65 && clickX <= 175) {
         currentLang = "en";
         localStorage.setItem("frustrating_brick_lang", "en");
         return;
       }
-      if (clickX >= trBtnX && clickX <= trBtnX + langBtnW) {
+      if (clickX >= 185 && clickX <= 295) {
         currentLang = "tr";
         localStorage.setItem("frustrating_brick_lang", "tr");
         return;
       }
     }
 
+    // 5 Zorluk Butonu
     const btnX = V_WIDTH / 2 - 120;
     const btnW = 240;
     const btnH = 36;
@@ -341,6 +344,7 @@ function handleInput(direction, clickX, clickY) {
       }
     }
 
+    // Ölüm Engelleme Kutusu
     const toggleY = 370;
     const toggleH = 46;
     if (clickX >= btnX && clickX <= btnX + btnW && clickY >= toggleY && clickY <= toggleY + toggleH) {
@@ -349,6 +353,7 @@ function handleInput(direction, clickX, clickY) {
       return;
     }
 
+    // Geri Butonu
     const backBtnX = V_WIDTH / 2 - 60;
     const backBtnY = 445;
     if (clickX >= backBtnX && clickX <= backBtnX + 120 && clickY >= backBtnY && clickY <= backBtnY + 38) {
@@ -358,55 +363,52 @@ function handleInput(direction, clickX, clickY) {
     return;
   }
 
+  // 4. PAUSE MENÜSÜ
   if (currentState === STATE.PAUSED) {
-    const btnX = V_WIDTH / 2 - 60;
+    const btnX = V_WIDTH / 2 - 60; // 120
     const btnW = 120;
     const btnH = 42;
-    const homeBtnY = V_HEIGHT / 2 - 45;
-    const resumeBtnY = V_HEIGHT / 2 + 15;
+    const homeBtnY = V_HEIGHT / 2 - 45; // 269
+    const resumeBtnY = V_HEIGHT / 2 + 15; // 329
 
-    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= homeBtnY && clickY <= homeBtnY + btnH) {
-      currentState = STATE.MENU;
-      return;
-    }
-    if (clickX >= btnX && clickX <= btnX + btnW && clickY >= resumeBtnY && clickY <= resumeBtnY + btnH) {
-      currentState = STATE.PLAYING;
-      return;
+    if (clickX >= btnX && clickX <= btnX + btnW) {
+      if (clickY >= homeBtnY && clickY <= homeBtnY + btnH) {
+        currentState = STATE.MENU;
+        return;
+      }
+      if (clickY >= resumeBtnY && clickY <= resumeBtnY + btnH) {
+        currentState = STATE.PLAYING;
+        return;
+      }
     }
     return;
   }
 
+  // 5. GAME OVER EKRANI (Butonlar)
   if (currentState === STATE.GAMEOVER) {
-    const btnY = 400;
-    const btnH = 48;
-
-    if (clickX >= 45 && clickX <= 115 && clickY >= btnY && clickY <= btnY + btnH) {
-      currentState = STATE.MENU;
-      return;
-    }
-
-    if (clickX >= 130 && clickX <= 230 && clickY >= btnY && clickY <= btnY + btnH) {
-      initReadySession();
-      currentState = STATE.READY;
-      return;
-    }
-
-    if (clickX >= 245 && clickX <= 315 && clickY >= btnY && clickY <= btnY + btnH) {
-      settingsReturnState = STATE.GAMEOVER;
-      currentState = STATE.SETTINGS;
-      return;
+    if (clickY >= 390 && clickY <= 460) {
+      // 1. Ana Ekran (Home) Butonu
+      if (clickX >= 40 && clickX <= 120) {
+        currentState = STATE.MENU;
+        return;
+      }
+      // 2. Yeniden Başlat (Play) Butonu
+      if (clickX >= 125 && clickX <= 235) {
+        initReadySession();
+        currentState = STATE.READY;
+        return;
+      }
+      // 3. Zorluk Ayarları Butonu
+      if (clickX >= 240 && clickX <= 320) {
+        settingsReturnState = STATE.GAMEOVER;
+        currentState = STATE.SETTINGS;
+        return;
+      }
     }
     return;
   }
 
-  if (currentState === STATE.PLAYING) {
-    const distToPause = Math.hypot(clickX - PAUSE_BTN_X, clickY - PAUSE_BTN_Y);
-    if (distToPause <= PAUSE_BTN_R + 10) {
-      currentState = STATE.PAUSED;
-      return;
-    }
-  }
-
+  // 6. OYNANIŞ (Zıplama)
   if (currentState === STATE.READY) {
     currentState = STATE.PLAYING;
   }
@@ -417,18 +419,13 @@ function handleInput(direction, clickX, clickY) {
   }
 }
 
-// Garbage Collection oluşturmayan sıfır-tahsisli çarpışma kontrolü
 function checkCollision(px, py, r, rx, ry, rw, rh) {
   const xRight = rx + rw;
   const yBottom = ry + rh;
 
-  // Üst Tepe
   if (px >= rx && px <= xRight && (py - r) >= ry && (py - r) <= yBottom) return true;
-  // Sağ Tepe
   if ((px + r) >= rx && (px + r) <= xRight && py >= ry && py <= yBottom) return true;
-  // Alt Tepe
   if (px >= rx && px <= xRight && (py + r) >= ry && (py + r) <= yBottom) return true;
-  // Sol Tepe
   if ((px - r) >= rx && (px - r) <= xRight && py >= ry && py <= yBottom) return true;
 
   return false;
@@ -993,16 +990,19 @@ function drawGameOver() {
 
   drawRewardBadge(V_WIDTH - 90, 300, score);
 
+  // 1. Home Butonu
   ctx.fillStyle = "#5c7cfa";
   drawRoundRect(45, 400, 70, 48, 24, true);
   ctx.fillStyle = "#ffffff";
   drawHomeIcon(80, 424);
 
+  // 2. Play Butonu
   ctx.fillStyle = "#55aa55";
   drawRoundRect(130, 400, 100, 48, 24, true);
   ctx.fillStyle = "#ffffff";
   drawPlayIcon(182, 424, 16);
 
+  // 3. Settings Butonu
   ctx.fillStyle = "#474787";
   drawRoundRect(245, 400, 70, 48, 24, true);
   drawGearIcon(280, 424, 12, "#ffffff", "#474787");
@@ -1034,7 +1034,6 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
-// Sıkı kontrollü Fixed Timestep (Maksimum 2 alt-adım sınırı)
 const FIXED_STEP = 1000 / 60;
 let accumulator = 0;
 let lastFrameTime = performance.now();
@@ -1063,42 +1062,75 @@ function gameLoop(currentTimestamp) {
   requestAnimationFrame(gameLoop);
 }
 
-function processInteraction(clientX, clientY) {
+// Canvas İçi Tıklama / Dokunma Dönüştürücüsü
+canvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const scaleX = V_WIDTH / rect.width;
   const scaleY = V_HEIGHT / rect.height;
 
-  const canvasX = (clientX - rect.left) * scaleX;
-  const canvasY = (clientY - rect.top) * scaleY;
+  const canvasX = (e.clientX - rect.left) * scaleX;
+  const canvasY = (e.clientY - rect.top) * scaleY;
 
   const direction = canvasX < V_WIDTH / 2 ? "left" : "right";
   handleInput(direction, canvasX, canvasY);
-}
+});
 
-// Çift tetiklemeyi önlemek için pointerdown standardı
-if (window.PointerEvent) {
-  window.addEventListener("pointerdown", (e) => {
-    processInteraction(e.clientX, e.clientY);
-  }, { passive: true });
-} else {
-  window.addEventListener("touchstart", (e) => {
-    const touch = e.touches[0];
-    processInteraction(touch.clientX, touch.clientY);
-  }, { passive: true });
-}
-
+// Klavye Kontrolleri
 window.addEventListener("keydown", (e) => {
-  if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+  const gameKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Spacebar", "Enter", "KeyA", "KeyD", "KeyW", "KeyP", "Escape"];
+  if (gameKeys.includes(e.key) || gameKeys.includes(e.code)) {
+    e.preventDefault();
+  }
+
+  if (e.repeat) return;
+
+  const key = e.key.toLowerCase();
+
+  if (key === "p" || key === "escape") {
     if (currentState === STATE.PLAYING) currentState = STATE.PAUSED;
     else if (currentState === STATE.PAUSED) currentState = STATE.PLAYING;
     else if (currentState === STATE.SETTINGS) currentState = settingsReturnState;
     return;
   }
-  if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-    handleInput("left", 0, V_HEIGHT / 2);
+
+  if (key === " " || key === "spacebar" || key === "enter") {
+    if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
+      initReadySession();
+      currentState = STATE.READY;
+      return;
+    }
+    if (currentState === STATE.SETTINGS) {
+      currentState = settingsReturnState;
+      return;
+    }
+    if (currentState === STATE.PAUSED) {
+      currentState = STATE.PLAYING;
+      return;
+    }
+    if (currentState === STATE.READY || currentState === STATE.PLAYING) {
+      const dir = player.x < V_WIDTH / 2 ? "right" : "left";
+      handleInput(dir, dir === "left" ? 0 : V_WIDTH, V_HEIGHT / 2);
+      return;
+    }
   }
-  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+
+  if (e.key === "ArrowLeft" || key === "a") {
+    if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
+      initReadySession();
+      currentState = STATE.READY;
+    }
+    handleInput("left", 0, V_HEIGHT / 2);
+    return;
+  }
+
+  if (e.key === "ArrowRight" || key === "d") {
+    if (currentState === STATE.MENU || currentState === STATE.GAMEOVER) {
+      initReadySession();
+      currentState = STATE.READY;
+    }
     handleInput("right", V_WIDTH, V_HEIGHT / 2);
+    return;
   }
 });
 

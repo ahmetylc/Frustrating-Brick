@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
+  <!-- PWA & Tam Ekran Meta Etiketleri -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#141414">
+  
   <title>Frustrating Brick</title>
   <style>
     * {
@@ -13,23 +20,26 @@
       -webkit-user-select: none;
       touch-action: manipulation;
     }
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
       background: #141414;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     #wrapper {
       position: relative;
-      width: 100vw;
-      max-width: 400px;
-      height: 100vh;
-      max-height: 720px;
+      width: 100%;
+      height: 100%;
+      max-width: 100vw;
+      max-height: 100dvh;
+      aspect-ratio: 360 / 628;
       background: #ffffff;
-      box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+      box-shadow: 0 0 35px rgba(0,0,0,0.8);
       overflow: hidden;
       transform: translateZ(0);
       -webkit-transform: translateZ(0);
@@ -38,6 +48,7 @@
       display: block;
       width: 100%;
       height: 100%;
+      object-fit: contain;
     }
   </style>
 </head>
@@ -187,7 +198,7 @@ let lastEarnedShieldMilestone = 0;
 let invulnerableTicks = 0;
 let shieldBounceTicks = 0;
 
-// Karakter Parametreleri (60 FPS Sabit Hıza Göre Tam Optimize Edilmiş)
+// Karakter Parametreleri
 const player = {
   x: V_WIDTH / 2,
   y: V_HEIGHT / 2 + 25,
@@ -469,7 +480,6 @@ function checkCollision(px, py, size, rx, ry, rw, rh) {
   return false;
 }
 
-// Deterministik Sabit Fizik Güncellemesi (Her saniye tam 60 kez çalışır)
 function fixedPhysicsUpdate() {
   if (currentState !== STATE.PLAYING) return;
 
@@ -1063,8 +1073,8 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
-// Fixed Timestep Engine (Cihaz kare hızından bağımsız gerçek zaman kilitli döngü)
-const FIXED_STEP = 1000 / 60; // 16.666ms (Tam 60 ticks/sn)
+// Fixed Timestep Engine
+const FIXED_STEP = 1000 / 60;
 let accumulator = 0;
 let lastFrameTime = performance.now();
 
@@ -1073,12 +1083,10 @@ function gameLoop(currentTimestamp) {
   let frameDuration = currentTimestamp - lastFrameTime;
   lastFrameTime = currentTimestamp;
 
-  // Aşırı takılma durumlarında döngü kilitlenmesini engelle
   if (frameDuration > 100) frameDuration = 100;
 
   accumulator += frameDuration;
 
-  // Gerçek geçen süre kadar fizik adımı işlet (Telefonda ve PC'de 1 saniye = tam 60 adım)
   while (accumulator >= FIXED_STEP) {
     fixedPhysicsUpdate();
     accumulator -= FIXED_STEP;

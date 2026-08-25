@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   
-  <!-- PWA & Tam Ekran Meta Etiketleri -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
@@ -18,7 +17,7 @@
       padding: 0;
       user-select: none;
       -webkit-user-select: none;
-      touch-action: manipulation;
+      touch-action: none;
     }
     html, body {
       width: 100%;
@@ -39,10 +38,9 @@
       max-height: 100dvh;
       aspect-ratio: 360 / 628;
       background: #ffffff;
-      box-shadow: 0 0 35px rgba(0,0,0,0.8);
       overflow: hidden;
-      transform: translateZ(0);
-      -webkit-transform: translateZ(0);
+      will-change: transform;
+      contain: strict;
     }
     canvas {
       display: block;
@@ -60,7 +58,7 @@
 
 <script>
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false }); // Alpha kapatılarak GPU çizimi hızlandırıldı
 
 const V_WIDTH = 360;
 const V_HEIGHT = 628;
@@ -68,13 +66,13 @@ canvas.width = V_WIDTH;
 canvas.height = V_HEIGHT;
 
 const PALETTES = [
-  "#86b6fe", // Açık Mavi
-  "#9358a9", // Mor
-  "#dd4e4e", // Kırmızı
-  "#edd246", // Sarı
-  "#90d886", // Yeşil
-  "#5cc9b8", // Turkuaz
-  "#e85d9e"  // Pembe
+  "#86b6fe",
+  "#9358a9",
+  "#dd4e4e",
+  "#edd246",
+  "#90d886",
+  "#5cc9b8",
+  "#e85d9e"
 ];
 
 const REWARD_COLORS = [
@@ -90,7 +88,6 @@ const REWARD_COLORS = [
   "#2f3542"
 ];
 
-// Dil Sözlüğü (Varsayılan: İngilizce)
 const I18N = {
   en: {
     rate: "RATE",
@@ -122,53 +119,12 @@ const I18N = {
 
 let currentLang = localStorage.getItem("frustrating_brick_lang") || "en";
 
-// 5 Kademeli Zorluk Seviyesi
 const DIFFICULTY_CONFIG = [
-  {
-    id: 0,
-    color: "#2ed573",
-    lowerRange: [22, 42],
-    upperRange: [22, 44],
-    closeChance: 0.85,
-    closeRange: [18, 30],
-    hInset: 3
-  },
-  {
-    id: 1,
-    color: "#3742fa",
-    lowerRange: [30, 52],
-    upperRange: [30, 54],
-    closeChance: 0.65,
-    closeRange: [24, 40],
-    hInset: 5
-  },
-  {
-    id: 2,
-    color: "#ffa502",
-    lowerRange: [40, 66],
-    upperRange: [40, 67],
-    closeChance: 0.40,
-    closeRange: [32, 50],
-    hInset: 8
-  },
-  {
-    id: 3,
-    color: "#ff4757",
-    lowerRange: [48, 74],
-    upperRange: [48, 74],
-    closeChance: 0.10,
-    closeRange: [40, 56],
-    hInset: 16
-  },
-  {
-    id: 4,
-    color: "#2f3542",
-    lowerRange: [58, 86],
-    upperRange: [58, 86],
-    closeChance: 0.04,
-    closeRange: [45, 60],
-    hInset: 22
-  }
+  { id: 0, color: "#2ed573", lowerRange: [22, 42], upperRange: [22, 44], closeChance: 0.85, closeRange: [18, 30], hInset: 3 },
+  { id: 1, color: "#3742fa", lowerRange: [30, 52], upperRange: [30, 54], closeChance: 0.65, closeRange: [24, 40], hInset: 5 },
+  { id: 2, color: "#ffa502", lowerRange: [40, 66], upperRange: [40, 67], closeChance: 0.40, closeRange: [32, 50], hInset: 8 },
+  { id: 3, color: "#ff4757", lowerRange: [48, 74], upperRange: [48, 74], closeChance: 0.10, closeRange: [40, 56], hInset: 16 },
+  { id: 4, color: "#2f3542", lowerRange: [58, 86], upperRange: [58, 86], closeChance: 0.04, closeRange: [45, 60], hInset: 22 }
 ];
 
 let currentDifficulty = parseInt(localStorage.getItem("frustrating_brick_diff") || "1");
@@ -191,20 +147,19 @@ let score = 0;
 let bestScore = parseInt(localStorage.getItem("frustrating_brick_best") || "0");
 let cameraY = 0;
 
-// Ölüm Engelleme
 let shieldStacks = 0;
 const MAX_SHIELD_STACKS = 2;
 let lastEarnedShieldMilestone = 0;
 let invulnerableTicks = 0;
 let shieldBounceTicks = 0;
 
-// Karakter Parametreleri
 const player = {
   x: V_WIDTH / 2,
   y: V_HEIGHT / 2 + 25,
   vx: 0,
   vy: 0,
   size: 19,
+  radius: (19 * Math.SQRT2) / 2,
   gravity: 0.324,
   jumpY: -9.41,
   jumpX: 1.14,
@@ -228,8 +183,7 @@ const PAUSE_BTN_Y = 26;
 const PAUSE_BTN_R = 13;
 
 function getTierColor(tierIndex) {
-  const colorIdx = Math.floor(tierIndex / 4) % PALETTES.length;
-  return PALETTES[colorIdx];
+  return PALETTES[Math.floor(tierIndex / 4) % PALETTES.length];
 }
 
 function getDiffName(diffIndex) {
@@ -463,20 +417,20 @@ function handleInput(direction, clickX, clickY) {
   }
 }
 
-function checkCollision(px, py, size, rx, ry, rw, rh) {
-  const r = (size * Math.SQRT2) / 2;
-  const points = [
-    { x: px, y: py - r },
-    { x: px + r, y: py },
-    { x: px, y: py + r },
-    { x: px - r, y: py }
-  ];
+// Garbage Collection oluşturmayan sıfır-tahsisli çarpışma kontrolü
+function checkCollision(px, py, r, rx, ry, rw, rh) {
+  const xRight = rx + rw;
+  const yBottom = ry + rh;
 
-  for (const p of points) {
-    if (p.x >= rx && p.x <= rx + rw && p.y >= ry && p.y <= ry + rh) {
-      return true;
-    }
-  }
+  // Üst Tepe
+  if (px >= rx && px <= xRight && (py - r) >= ry && (py - r) <= yBottom) return true;
+  // Sağ Tepe
+  if ((px + r) >= rx && (px + r) <= xRight && py >= ry && py <= yBottom) return true;
+  // Alt Tepe
+  if (px >= rx && px <= xRight && (py + r) >= ry && (py + r) <= yBottom) return true;
+  // Sol Tepe
+  if ((px - r) >= rx && (px - r) <= xRight && py >= ry && py <= yBottom) return true;
+
   return false;
 }
 
@@ -487,7 +441,7 @@ function fixedPhysicsUpdate() {
   player.y += player.vy;
   player.x += player.vx;
 
-  const cornerBound = (player.size * Math.SQRT2) / 2;
+  const cornerBound = player.radius;
   let isTouchingWall = false;
 
   if (player.x - cornerBound <= 0) {
@@ -540,8 +494,9 @@ function fixedPhysicsUpdate() {
     }
 
     if (invulnerableTicks === 0) {
-      for (const r of obs.rects) {
-        if (checkCollision(player.x, player.y, player.size, r.x, r.y, r.w, r.h)) {
+      for (let j = 0; j < obs.rects.length; j++) {
+        const r = obs.rects[j];
+        if (checkCollision(player.x, player.y, player.radius, r.x, r.y, r.w, r.h)) {
           if (!triggerDeathOrShield()) return;
           break;
         }
@@ -549,8 +504,12 @@ function fixedPhysicsUpdate() {
     }
 
     if (obs.y + cameraY > V_HEIGHT + 140) {
-      const highestY = Math.min(...obstacles.map(o => o.y));
-      const highestScore = Math.max(...obstacles.map(o => o.scoreVal));
+      let highestY = Infinity;
+      let highestScore = -Infinity;
+      for (let k = 0; k < obstacles.length; k++) {
+        if (obstacles[k].y < highestY) highestY = obstacles[k].y;
+        if (obstacles[k].scoreVal > highestScore) highestScore = obstacles[k].scoreVal;
+      }
       obstacles[i] = createObstacleTier(highestY - TIER_SPACING, highestScore + 1);
     }
   }
@@ -564,9 +523,11 @@ function draw() {
   ctx.translate(0, cameraY);
 
   if (currentState === STATE.PLAYING || currentState === STATE.READY || currentState === STATE.PAUSED) {
-    for (const obs of obstacles) {
+    for (let i = 0; i < obstacles.length; i++) {
+      const obs = obstacles[i];
       ctx.fillStyle = obs.color;
-      for (const r of obs.rects) {
+      for (let j = 0; j < obs.rects.length; j++) {
+        const r = obs.rects[j];
         ctx.fillRect(r.x, r.y, r.w, r.h);
       }
     }
@@ -1073,7 +1034,7 @@ function drawRoundRect(x, y, w, h, r, fill = true, stroke = false) {
   if (stroke) ctx.stroke();
 }
 
-// Fixed Timestep Engine
+// Sıkı kontrollü Fixed Timestep (Maksimum 2 alt-adım sınırı)
 const FIXED_STEP = 1000 / 60;
 let accumulator = 0;
 let lastFrameTime = performance.now();
@@ -1083,13 +1044,19 @@ function gameLoop(currentTimestamp) {
   let frameDuration = currentTimestamp - lastFrameTime;
   lastFrameTime = currentTimestamp;
 
-  if (frameDuration > 100) frameDuration = 100;
+  if (frameDuration > 50) frameDuration = 50;
 
   accumulator += frameDuration;
 
-  while (accumulator >= FIXED_STEP) {
+  let steps = 0;
+  while (accumulator >= FIXED_STEP && steps < 2) {
     fixedPhysicsUpdate();
     accumulator -= FIXED_STEP;
+    steps++;
+  }
+
+  if (accumulator > FIXED_STEP * 2) {
+    accumulator = 0;
   }
 
   draw();
@@ -1108,15 +1075,17 @@ function processInteraction(clientX, clientY) {
   handleInput(direction, canvasX, canvasY);
 }
 
-window.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  const touch = e.touches[0];
-  processInteraction(touch.clientX, touch.clientY);
-}, { passive: false });
-
-window.addEventListener("mousedown", (e) => {
-  processInteraction(e.clientX, e.clientY);
-});
+// Çift tetiklemeyi önlemek için pointerdown standardı
+if (window.PointerEvent) {
+  window.addEventListener("pointerdown", (e) => {
+    processInteraction(e.clientX, e.clientY);
+  }, { passive: true });
+} else {
+  window.addEventListener("touchstart", (e) => {
+    const touch = e.touches[0];
+    processInteraction(touch.clientX, touch.clientY);
+  }, { passive: true });
+}
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "p" || e.key === "P" || e.key === "Escape") {

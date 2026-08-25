@@ -249,7 +249,6 @@ function renderWingsToContext(c, cx, cy, scale, color) {
   c.restore();
 }
 
-// 10 Dişli Mekanik Çark Çizimi
 function renderGearToContext(c, cx, cy, outerR, color, innerHoleColor) {
   c.save();
   c.translate(cx, cy);
@@ -278,7 +277,6 @@ function renderGearToContext(c, cx, cy, outerR, color, innerHoleColor) {
   c.closePath();
   c.fill();
 
-  // Merkez Delik
   c.fillStyle = innerHoleColor;
   c.beginPath();
   c.arc(0, 0, outerR * 0.38, 0, Math.PI * 2);
@@ -294,6 +292,7 @@ function renderHomeToContext(c, hx, hy) {
   c.lineTo(hx - 7, hy);
   c.lineTo(hx - 7, hy + 8);
   c.lineTo(hx + 7, hy + 8);
+  ctx.lineTo?.(hx + 7, hy);
   c.lineTo(hx + 7, hy);
   c.lineTo(hx + 10, hy);
   c.closePath();
@@ -418,19 +417,27 @@ function handleInput(direction, clickX, clickY) {
   }
 
   if (currentState === STATE.MENU) {
+    // Sağ Üst Ayarlar Dişli Çark
     if (clickX >= 290 && clickY <= 65) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
       return;
     }
+    // PLAY Butonu
     if (clickX >= 90 && clickX <= 180 && clickY >= 370 && clickY <= 430) {
       initReadySession();
       currentState = STATE.READY;
       return;
     }
+    // Alt Ayarlar Butonu
     if (clickX >= 110 && clickX <= 250 && clickY >= 430 && clickY <= 480) {
       settingsReturnState = STATE.MENU;
       currentState = STATE.SETTINGS;
+      return;
+    }
+    // "MADE BY AHMETYLC" Mail Yönlendirme Alanı
+    if (clickY >= V_HEIGHT - 55 && clickY <= V_HEIGHT - 15 && clickX >= 40 && clickX <= V_WIDTH - 40) {
+      window.location.href = "mailto:ahmetyalcinsoy@gmail.com";
       return;
     }
     return;
@@ -804,6 +811,7 @@ function drawMenu() {
   ctx.fillRect(-10, -10, 20, 20);
   ctx.restore();
 
+  // 10 Dişli Mekanik Çark
   ctx.drawImage(CACHE.gearGray, 307, 14);
 
   // RATE
@@ -847,10 +855,15 @@ function drawMenu() {
   setFont("bold 13px sans-serif");
   ctx.fillText(lang.settings, V_WIDTH / 2, V_HEIGHT / 2 + 147);
 
+  // Zorluk Etiketi
   setFill("#888888");
   setFont("12px sans-serif");
   ctx.fillText(lang.diffLabel + getDiffName(currentDifficulty) + (deathPreventionEnabled ? lang.shieldOn : ""), V_WIDTH / 2, V_HEIGHT - 65);
-  ctx.fillText("© 2026 AHMETYLC", V_WIDTH / 2, V_HEIGHT - 35);
+
+  // Tıklanabilir Geliştirici İmzası
+  setFill("#555555");
+  setFont("500 11px sans-serif");
+  ctx.fillText("© 2026 MADE BY AHMETYLC", V_WIDTH / 2, V_HEIGHT - 35);
 }
 
 function drawSettings() {
